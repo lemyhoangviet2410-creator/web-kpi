@@ -7,6 +7,10 @@ function dinhDangTien(so: number) {
   return so.toLocaleString("vi-VN") + " đ";
 }
 
+function themThang(ngay: Date, soThang: number): Date {
+  return new Date(Date.UTC(ngay.getUTCFullYear(), ngay.getUTCMonth() + soThang, ngay.getUTCDate()));
+}
+
 export default async function Home() {
   const supabase = await createClient();
 
@@ -38,13 +42,43 @@ export default async function Home() {
     .slice(0, 10);
   const tenThang = `${homNay.getMonth() + 1}/${homNay.getFullYear()}`;
 
-  const [{ data: dsNhanVien }, { data: donHang }, { count: soChiTieu }] = await Promise.all([
+  // Lấy TOÀN BỘ lịch sử đơn hàng của 3 sản phẩm trọng tâm (không giới hạn theo tháng) để tính
+  // hạng mục "Mở mới" — cần biết đúng ngày mua gần nhất trước đó và NV nào đã từng bán cho đúng
+  // cặp (khách hàng, nhóm sản phẩm) này. Phân trang vì Supabase giới hạn tối đa 1000 dòng/lần gọi.
+  async function layDonHangLichSuChoMoMoi() {
+    const KICH_THUOC_TRANG = 1000;
+    const ketQua: {
+      id: number;
+      ma_nv: string | null;
+      ma_to_chuc: string | null;
+      ngay_chung_tu: string;
+      tong_tien: number;
+      products: { nhom_trong_tam: string | null } | null;
+    }[] = [];
+    let trang = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from("orders")
+        .select("id, ma_nv, ma_to_chuc, ngay_chung_tu, tong_tien, products(nhom_trong_tam)")
+        .order("ngay_chung_tu", { ascending: true })
+        .order("id", { ascending: true })
+        .range(trang * KICH_THUOC_TRANG, trang * KICH_THUOC_TRANG + KICH_THUOC_TRANG - 1);
+      if (error || !data || data.length === 0) break;
+      ketQua.push(...(data as unknown as (typeof ketQua)));
+      if (data.length < KICH_THUOC_TRANG) break;
+      trang += 1;
+    }
+    return ketQua;
+  }
+
+  const [{ data: dsNhanVien }, { data: donHang }, donHangToanBo, { count: soChiTieu }] = await Promise.all([
     supabase.from("nhan_vien").select("ma_nv, ten_nv").eq("active", true).order("ten_nv"),
     supabase
       .from("orders")
       .select("ma_nv, ma_vu_viec, tong_tien")
       .gte("ngay_chung_tu", dauThang)
       .lt("ngay_chung_tu", dauThangSau),
+    layDonHangLichSuChoMoMoi(),
     supabase.from("kpi_targets").select("*", { count: "exact", head: true }),
   ]);
 
@@ -73,6 +107,73 @@ export default async function Home() {
 
   const tongDoanhThuThau = hangMuc.reduce((s, x) => s + x.thau, 0);
   const tongDoanhThuKdPm = hangMuc.reduce((s, x) => s + x.keDonPhongMach, 0);
+
+  // ---- Logic tính KPI hạng mục "Mở mới" ----
+  // Quy tắc đã chốt với Việt ngày 14/9/2026 (xem đề bài mục 14-15). CHỈ áp dụng cho các sản phẩm
+  // thuộc danh sách "sản phẩm trọng tâm" hiện tại (Fosmitic, Progermila, Tranfast — cột
+  // products.nhom_trong_tam, danh sách này có thể đổi theo quý). Nhiều mã SP khác nhau của cùng
+  // 1 tên thuốc (do đổi mã/quy cách đóng gói theo thời gian) được GỘP LẠI thành 1 qua cột này —
+  // vd Fosmitic có cả mã F00550 và TH00940, đều tính là "Fosmitic".
+  //
+  // Với mỗi cặp (khách hàng, nhóm sản phẩm trọng tâm), xét các đơn hàng theo đúng thứ tự thời
+  // gian. 1 đơn được tính "Mở mới" nếu CẢ 2 điều kiện sau đều đúng:
+  //  1) Đây là lần mua ĐẦU TIÊN TUYỆT ĐỐI của cặp này (chưa có đơn nào trước đó trong lịch sử),
+  //     HOẶC khoảng cách tới lần mua gần nhất trước đó của đúng cặp này > 4 tháng (tính theo
+  //     đúng ngày, không phải theo tháng lịch — vd mua 11/1, đến sau 11/5 mới mua lại mới tính).
+  //  2) NV đứng đơn lần này CHƯA TỪNG bán đúng nhóm sản phẩm đó cho đúng khách hàng này trước đây
+  //     (so với TẤT CẢ NV đã từng bán, không chỉ đơn liền trước) — nếu trùng đúng NV cũ, đơn đó
+  //     chỉ tính vào doanh số bình thường, không tính Mở mới cho ai.
+  // Nếu trong tháng có nhiều đơn khác nhau đều thỏa 2 điều kiện trên cho cùng 1 cặp, tất cả đều
+  // được cộng vào doanh số Mở mới (không giới hạn 1 lần/cặp/tháng).
+  // Lưu ý dữ liệu: lịch sử đơn hàng trong hệ thống chỉ có từ 1/10/2025 — với cặp nào có lần mua
+  // đầu tiên thật sự trước mốc này, hệ thống sẽ nhầm là "lần đầu tuyệt đối".
+  const donHopLe = donHangToanBo.filter(
+    (d) => !!d.products?.nhom_trong_tam && d.ma_to_chuc && d.ma_nv
+  );
+
+  const theoCapKhNhom = new Map<string, typeof donHopLe>();
+  for (const dong of donHopLe) {
+    const khoa = `${dong.ma_to_chuc}|${dong.products?.nhom_trong_tam}`;
+    const ds = theoCapKhNhom.get(khoa) ?? [];
+    ds.push(dong);
+    theoCapKhNhom.set(khoa, ds);
+  }
+  // Mỗi mảng trong theoCapKhNhom đã đúng thứ tự thời gian nhờ câu query .order() ở trên.
+
+  const tongMoMoiTheoNv = new Map<string, { doanhSo: number; soDon: number }>();
+
+  for (const ds of theoCapKhNhom.values()) {
+    const nvDaBan = new Set<string>();
+    let ngayTruoc: Date | null = null;
+
+    for (const dong of ds) {
+      const maNv = dong.ma_nv as string;
+      const ngayHienTai = new Date(dong.ngay_chung_tu + "T00:00:00Z");
+      const laLanDauTuyetDoi = ngayTruoc === null;
+      const duKhoangNghi = ngayTruoc !== null && ngayHienTai.getTime() > themThang(ngayTruoc, 4).getTime();
+      const nvChuaTungBan = !nvDaBan.has(maNv);
+
+      if ((laLanDauTuyetDoi || duKhoangNghi) && nvChuaTungBan) {
+        if (dong.ngay_chung_tu >= dauThang && dong.ngay_chung_tu < dauThangSau) {
+          const hienTai = tongMoMoiTheoNv.get(maNv) ?? { doanhSo: 0, soDon: 0 };
+          hienTai.doanhSo += Number(dong.tong_tien);
+          hienTai.soDon += 1;
+          tongMoMoiTheoNv.set(maNv, hienTai);
+        }
+      }
+
+      nvDaBan.add(maNv);
+      ngayTruoc = ngayHienTai;
+    }
+  }
+
+  const hangMucMoMoi = (dsNhanVien ?? []).map((nv) => {
+    const t = tongMoMoiTheoNv.get(nv.ma_nv);
+    return { ...nv, soDonMoMoi: t?.soDon ?? 0, doanhSoMoMoi: t?.doanhSo ?? 0 };
+  });
+
+  const tongDoanhSoMoMoi = hangMucMoMoi.reduce((s, x) => s + x.doanhSoMoMoi, 0);
+  const tongSoDonMoMoi = hangMucMoMoi.reduce((s, x) => s + x.soDonMoMoi, 0);
 
   return (
     <main style={{ padding: "2rem", fontFamily: "sans-serif", maxWidth: 900, margin: "0 auto" }}>
@@ -139,6 +240,67 @@ export default async function Home() {
             </td>
             <td style={{ ...oTd, fontWeight: 700, borderTop: "2px solid #333" }}>
               {dinhDangTien(tongDoanhThuThau + tongDoanhThuKdPm)}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <h2 style={{ fontSize: "1.2rem", marginTop: "2.5rem" }}>Mở mới sản phẩm — tháng {tenThang}</h2>
+
+      <p style={{ fontSize: "0.85rem", color: "#555", marginTop: "0.5rem", lineHeight: 1.5 }}>
+        Chỉ áp dụng cho <b>3 sản phẩm trọng tâm hiện tại: Fosmitic, Progermila, Tranfast</b> (danh sách có thể đổi
+        theo quý — nhiều mã SP khác nhau của cùng 1 tên thuốc được gộp làm 1 khi xét).
+        <br />
+        <b>Mở mới</b> = khách hàng mua lại 1 trong 3 sản phẩm này sau khi đã <b>quá 4 tháng</b> (tính theo đúng ngày
+        mua gần nhất, không theo tháng lịch) không mua — hoặc đây là lần đầu tiên khách mua sản phẩm đó — <b>và</b>{" "}
+        NV đứng đơn lần này <b>chưa từng bán đúng sản phẩm đó cho đúng khách hàng này trước đây</b>. Nếu vẫn là NV cũ
+        đứng đơn, đơn đó chỉ tính vào doanh số, không tính Mở mới (trần điểm 150%).
+        <br />
+        Dữ liệu lịch sử trong hệ thống chỉ có từ 1/10/2025 nên với các cặp mua lần đầu thật sự trước mốc này, hệ
+        thống có thể nhầm là &quot;lần đầu tuyệt đối&quot;.
+      </p>
+
+      {!soChiTieu ? (
+        <p
+          style={{
+            background: "#fff8e1",
+            border: "1px solid #ffe082",
+            padding: "0.6rem 0.8rem",
+            borderRadius: 4,
+            fontSize: "0.85rem",
+            marginTop: "1rem",
+          }}
+        >
+          Chưa có dữ liệu chỉ tiêu KPI tháng này trong hệ thống (bảng kpi_targets đang trống) — bảng dưới đây mới chỉ
+          hiển thị <b>doanh số Mở mới thực tế</b>, chưa tính được % đạt chỉ tiêu (trần 150%).
+        </p>
+      ) : null}
+
+      <table style={{ borderCollapse: "collapse", marginTop: "1rem", width: "100%" }}>
+        <thead>
+          <tr>
+            <th style={oThead}>Nhân viên</th>
+            <th style={oThead}>Số đơn Mở mới</th>
+            <th style={oThead}>Doanh số Mở mới</th>
+          </tr>
+        </thead>
+        <tbody>
+          {hangMucMoMoi.map((nv) => (
+            <tr key={nv.ma_nv}>
+              <td style={oTd}>
+                {nv.ten_nv} <span style={{ color: "#999" }}>({nv.ma_nv})</span>
+              </td>
+              <td style={oTd}>{nv.soDonMoMoi}</td>
+              <td style={{ ...oTd, fontWeight: 600 }}>{dinhDangTien(nv.doanhSoMoMoi)}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td style={{ ...oTd, fontWeight: 700, borderTop: "2px solid #333" }}>Tổng team</td>
+            <td style={{ ...oTd, fontWeight: 700, borderTop: "2px solid #333" }}>{tongSoDonMoMoi}</td>
+            <td style={{ ...oTd, fontWeight: 700, borderTop: "2px solid #333" }}>
+              {dinhDangTien(tongDoanhSoMoMoi)}
             </td>
           </tr>
         </tfoot>
