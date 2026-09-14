@@ -466,6 +466,98 @@ export default async function Home() {
     };
   });
 
+  // ---- KPI của SS = KPI của cả nhóm ----
+  // Việt xác nhận 14/9/2026: KPI "cả nhóm" chính là dòng KPI của SS, KHÔNG PHẢI đơn hàng cá nhân
+  // của SS. Với Doanh số Kê đơn/Phòng mạch + Thầu: Kế hoạch giữ đúng số công ty giao riêng cho SS,
+  // Thực hiện = TỔNG thực hiện của TẤT CẢ nhân viên trong team (kể cả đơn hàng cá nhân của SS, nếu
+  // có) — đúng công thức skill kpi-analyst: "DS của SS = tổng Thực hiện 9 TDV + Thực hiện cá nhân
+  // của SS". Với Sản phẩm trọng tâm (Duy trì+Mở mới) và Code mới: CẢ Kế hoạch và Thực hiện đều là
+  // tổng cộng dồn chỉ tiêu/thực hiện của từng NV trong team (kể cả SS) — vì các mục này gắn với
+  // từng khách hàng/mã cụ thể do từng người phụ trách, không có 1 số "kế hoạch team" riêng do công
+  // ty đặt sẵn như 2 mục doanh số. Nhân sự & SP thị trường vẫn "chưa theo dõi" như cũ.
+  const teamKdPmTh = hangMuc.reduce((s, x) => s + x.keDonPhongMach, 0);
+  const teamThauTh = hangMuc.reduce((s, x) => s + x.thau, 0);
+  const teamTheoNhomSptt = NHOM_SAN_PHAM_TRONG_TAM.map((nhom) => {
+    const soKhachDat = hangMucMoMoi.reduce((s, x) => s + (x.theoNhom.find((n) => n.nhom === nhom)?.soKhachDat ?? 0), 0);
+    const chiTieuSoKhach = hangMucMoMoi.reduce(
+      (s, x) => s + (x.theoNhom.find((n) => n.nhom === nhom)?.chiTieuSoKhach ?? 0),
+      0
+    );
+    const diemKh = hangMucMoMoi.reduce((s, x) => s + (x.theoNhom.find((n) => n.nhom === nhom)?.diemKh ?? 0), 0);
+    const soDon = hangMucMoMoi.reduce((s, x) => s + (x.theoNhom.find((n) => n.nhom === nhom)?.soDon ?? 0), 0);
+    const doanhSo = hangMucMoMoi.reduce((s, x) => s + (x.theoNhom.find((n) => n.nhom === nhom)?.doanhSo ?? 0), 0);
+    const tiLe = chiTieuSoKhach > 0 ? soKhachDat / chiTieuSoKhach : null;
+    const phanTram = tiLe !== null ? Math.min(tiLe, 1.5) * 100 : null;
+    return { nhom, soDon, doanhSo, soKhachDat, chiTieuSoKhach, phanTram, diemKh, diemTh: tiLe !== null ? Math.min(tiLe, 1.5) * diemKh : 0 };
+  });
+  const teamDiemKhMoMoi = teamTheoNhomSptt.reduce((s, n) => s + n.diemKh, 0);
+  const teamDiemThMoMoi = teamTheoNhomSptt.reduce((s, n) => s + n.diemTh, 0);
+  const teamDuyTriDat = hangMucDuyTri.reduce((s, x) => s + x.soKhachDat, 0);
+  const teamDuyTriTong = hangMucDuyTri.reduce((s, x) => s + x.tongKhachMucTieu, 0);
+  const teamDiemKhDuyTri = chiTietDuyTri.reduce((s, ct) => s + ct.diemKh, 0);
+  const teamDiemThDuyTri = chiTietDuyTri.reduce((s, ct) => s + ct.diemTh, 0);
+  const teamDiemKhSptt = teamDiemKhDuyTri + teamDiemKhMoMoi;
+  const teamDiemThSptt = teamDiemThDuyTri + teamDiemThMoMoi;
+  const teamChiTieuCodeMoi = hangMucCodeMoi.reduce((s, x) => s + x.chiTieu, 0);
+  const teamDiemKhCodeMoi = hangMucCodeMoi.reduce((s, x) => s + x.diemKh, 0);
+  const teamThCodeMoi = hangMucCodeMoi.reduce((s, x) => s + x.th, 0);
+
+  const idxSS = (dsNhanVien ?? []).findIndex((nv) => nv.vai_tro === "ss");
+  const maSS = idxSS >= 0 ? (dsNhanVien ?? [])[idxSS].ma_nv : null;
+
+  if (maSS) {
+    const idxDs = hangMuc.findIndex((x) => x.ma_nv === maSS);
+    if (idxDs >= 0) {
+      const muc = hangMuc[idxDs];
+      const tiLeKdPm = muc.chiTieuKdPm > 0 ? teamKdPmTh / muc.chiTieuKdPm : null;
+      const tiLeThau = muc.chiTieuThau > 0 ? teamThauTh / muc.chiTieuThau : null;
+      hangMuc[idxDs] = {
+        ...muc,
+        keDonPhongMach: teamKdPmTh,
+        thau: teamThauTh,
+        tongCong: teamKdPmTh + teamThauTh,
+        phanTramKdPm: tiLeKdPm !== null ? tiLeKdPm * 100 : null,
+        phanTramThau: tiLeThau !== null ? Math.min(tiLeThau, 1.2) * 100 : null,
+        diemThKdPm: tiLeKdPm !== null ? tiLeKdPm * muc.diemKhKdPm : 0,
+        diemThThau: tiLeThau !== null ? Math.min(tiLeThau, 1.2) * muc.diemKhThau : 0,
+      };
+    }
+
+    const idxMoMoi = hangMucMoMoi.findIndex((x) => x.ma_nv === maSS);
+    if (idxMoMoi >= 0) {
+      hangMucMoMoi[idxMoMoi] = {
+        ...hangMucMoMoi[idxMoMoi],
+        soDonMoMoi: teamTheoNhomSptt.reduce((s, n) => s + n.soDon, 0),
+        doanhSoMoMoi: teamTheoNhomSptt.reduce((s, n) => s + n.doanhSo, 0),
+        theoNhom: teamTheoNhomSptt,
+      };
+    }
+
+    const idxDuyTri = hangMucDuyTri.findIndex((x) => x.ma_nv === maSS);
+    if (idxDuyTri >= 0) {
+      hangMucDuyTri[idxDuyTri] = {
+        ...hangMucDuyTri[idxDuyTri],
+        soKhachDat: teamDuyTriDat,
+        tongKhachMucTieu: teamDuyTriTong,
+        tyLeDat: teamDuyTriTong > 0 ? (teamDuyTriDat / teamDuyTriTong) * 100 : 0,
+      };
+    }
+
+    const idxCodeMoi = hangMucCodeMoi.findIndex((x) => x.ma_nv === maSS);
+    if (idxCodeMoi >= 0) {
+      const tiLeCodeMoi = teamChiTieuCodeMoi > 0 ? teamThCodeMoi / teamChiTieuCodeMoi : null;
+      hangMucCodeMoi[idxCodeMoi] = {
+        ...hangMucCodeMoi[idxCodeMoi],
+        apDung: teamChiTieuCodeMoi > 0,
+        chiTieu: teamChiTieuCodeMoi,
+        th: teamThCodeMoi,
+        diemKh: teamDiemKhCodeMoi,
+        phanTram: tiLeCodeMoi !== null ? tiLeCodeMoi * 100 : null,
+        diemTh: tiLeCodeMoi !== null ? tiLeCodeMoi * teamDiemKhCodeMoi : 0,
+      };
+    }
+  }
+
   // ---- Tổng điểm KPI (thang 1000, chia 6 hạng mục theo đúng cơ cấu công ty) ----
   // 1. Doanh số Kê đơn/Phòng mạch  2. Doanh số Thầu  3. Code mới
   // 4. Nhân sự (chỉ áp cho SS)     5. Sản phẩm trọng tâm (SPTT = Duy trì + Mở mới cộng lại)
@@ -516,8 +608,14 @@ export default async function Home() {
     const laThuViec = MA_NV_THU_VIEC.has(nv.ma_nv);
     const ds = hangMuc.find((x) => x.ma_nv === nv.ma_nv);
     const cm = hangMucCodeMoi.find((x) => x.ma_nv === nv.ma_nv);
-    const diemKhSptt = (diemKhDuyTriTheoNv.get(nv.ma_nv) ?? 0) + (diemKhMoMoiTheoNv.get(nv.ma_nv) ?? 0);
-    const diemThSptt = (diemThDuyTriTheoNv.get(nv.ma_nv) ?? 0) + (diemThMoMoiTheoNv.get(nv.ma_nv) ?? 0);
+    // SPTT của SS = tổng cộng dồn Điểm KH/TH của TOÀN team (không chỉ riêng khách hàng cá nhân SS
+    // phụ trách) — xem giải thích ở khối "KPI của SS = KPI của cả nhóm" phía trên.
+    const diemKhSptt = laSS
+      ? teamDiemKhSptt
+      : (diemKhDuyTriTheoNv.get(nv.ma_nv) ?? 0) + (diemKhMoMoiTheoNv.get(nv.ma_nv) ?? 0);
+    const diemThSptt = laSS
+      ? teamDiemThSptt
+      : (diemThDuyTriTheoNv.get(nv.ma_nv) ?? 0) + (diemThMoMoiTheoNv.get(nv.ma_nv) ?? 0);
 
     const mucs: MucKpi[] = [
       {
