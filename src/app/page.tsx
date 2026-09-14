@@ -439,13 +439,6 @@ export default async function Home() {
               <span className="h-2 w-2 rounded-full bg-indigo-500" />
               <h2 className="text-lg font-semibold text-slate-900">Doanh số theo kênh</h2>
             </div>
-            <p className="mt-2 text-sm leading-relaxed text-slate-500">
-              Kênh <b className="font-medium text-slate-700">Thầu</b> = các dòng đơn có Mã vụ việc =
-              &quot;TH&quot; (trần điểm 120%). Kênh{" "}
-              <b className="font-medium text-slate-700">Kê đơn / Phòng mạch</b> = gộp tất cả mã vụ việc còn lại
-              (không giới hạn trần) vì dữ liệu nguồn không có mã riêng tách 2 kênh này. Các dòng chiết khấu/voucher
-              đã được cộng dồn vào doanh số theo đúng dấu của nó.
-            </p>
           </div>
 
           {!soChiTieu ? (
@@ -509,18 +502,6 @@ export default async function Home() {
               <span className="h-2 w-2 rounded-full bg-emerald-500" />
               <h2 className="text-lg font-semibold text-slate-900">Mở mới sản phẩm</h2>
             </div>
-            <p className="mt-2 text-sm leading-relaxed text-slate-500">
-              Chỉ áp dụng cho <b className="font-medium text-slate-700">{NHOM_SAN_PHAM_TRONG_TAM.length} sản phẩm
-              trọng tâm: {NHOM_SAN_PHAM_TRONG_TAM.join(", ")}</b>. <b className="font-medium text-slate-700">Mở
-              mới</b> = khách hàng mua lại 1 trong các sản phẩm này, qua đúng cùng 1 kênh, sau khi đã{" "}
-              <b className="font-medium text-slate-700">quá 4 tháng</b> không mua (tính theo đúng ngày, không theo
-              tháng lịch) — hoặc lần đầu tiên mua qua kênh đó — và NV đứng đơn chưa từng bán đúng sản phẩm/kênh đó
-              cho đúng khách này trước đây. Cùng khách, cùng sản phẩm nhưng bán qua kênh khác vẫn tính là 1 cặp Mở
-              mới riêng (trần điểm 150%).
-              <br />
-              Dữ liệu lịch sử trong hệ thống chỉ có từ 1/10/2025 nên với các cặp mua lần đầu thật sự trước mốc này,
-              hệ thống có thể nhầm là &quot;lần đầu tuyệt đối&quot;.
-            </p>
           </div>
 
           {!soChiTieu ? (
@@ -626,13 +607,6 @@ export default async function Home() {
               <span className="h-2 w-2 rounded-full bg-violet-500" />
               <h2 className="text-lg font-semibold text-slate-900">Duy trì sản phẩm</h2>
             </div>
-            <p className="mt-2 text-sm leading-relaxed text-slate-500">
-              Chỉ áp dụng cho <b className="font-medium text-slate-700">{NHOM_SAN_PHAM_TRONG_TAM.length} sản phẩm
-              trọng tâm: {NHOM_SAN_PHAM_TRONG_TAM.join(", ")}</b>. Khác với Mở mới, Duy trì tính theo{" "}
-              <b className="font-medium text-slate-700">sản lượng</b> (không phải tiền) mỗi NV bán được cho từng sản
-              phẩm, đối chiếu với chỉ tiêu công ty giao (theo khách hàng cụ thể, hoặc chỉ tiêu tổng theo NV+sản phẩm
-              nếu công ty chưa breakdown theo khách). % đạt = sản lượng đã bán / chỉ tiêu, <b className="font-medium text-slate-700">trần 100%</b>.
-            </p>
           </div>
 
           {chiTietDuyTri.length === 0 ? (
