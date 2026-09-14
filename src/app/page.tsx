@@ -2,28 +2,12 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import NutDangXuat from "@/components/nut-dang-xuat";
 import GanMaNhanVien from "@/components/gan-ma-nhan-vien";
-
-function dinhDangTien(so: number) {
-  return so.toLocaleString("vi-VN") + " đ";
-}
+import ChonNhanVienXemKpi from "@/components/chon-nhan-vien-xem-kpi";
+import { NHOM_SAN_PHAM_TRONG_TAM } from "@/lib/sptt";
 
 function themThang(ngay: Date, soThang: number): Date {
   return new Date(Date.UTC(ngay.getUTCFullYear(), ngay.getUTCMonth() + soThang, ngay.getUTCDate()));
 }
-
-// Danh sách "sản phẩm trọng tâm" (SPTT) hiện tại — khớp với cột products.nhom_trong_tam.
-// Danh sách này có thể đổi theo quý (xem đề bài mục 2, 15) — khi đổi, cập nhật ở đây và
-// trong dữ liệu cột nhom_trong_tam. Đối chiếu với file chỉ tiêu KPI tháng 9/2026 của công ty và
-// skill mo-moi-sptt ngày 14/9/2026 — mở rộng từ 3 lên đủ 7 SP SPTT chính thức.
-const NHOM_SAN_PHAM_TRONG_TAM = [
-  "Fosmitic",
-  "Progermila",
-  "Tranfast",
-  "Hepaphagen",
-  "Biosoft",
-  "Micospray",
-  "Kalira",
-] as const;
 
 export default async function Home() {
   const supabase = await createClient();
@@ -166,9 +150,6 @@ export default async function Home() {
     };
   });
 
-  const tongDoanhThuThau = hangMuc.reduce((s, x) => s + x.thau, 0);
-  const tongDoanhThuKdPm = hangMuc.reduce((s, x) => s + x.keDonPhongMach, 0);
-
   // ---- Logic tính KPI hạng mục "Mở mới" ----
   // Quy tắc chuẩn theo skill mo-moi-sptt (đối chiếu với Việt ngày 14/9/2026, xem đề bài mục
   // 14-15). CHỈ áp dụng cho các sản phẩm thuộc danh sách "sản phẩm trọng tâm" hiện tại (Fosmitic,
@@ -310,24 +291,6 @@ export default async function Home() {
     };
   });
 
-  const tongDoanhSoMoMoi = hangMucMoMoi.reduce((s, x) => s + x.doanhSoMoMoi, 0);
-  const tongSoDonMoMoi = hangMucMoMoi.reduce((s, x) => s + x.soDonMoMoi, 0);
-  const tongTheoNhomChung = NHOM_SAN_PHAM_TRONG_TAM.map((nhom) => {
-    const soKhachDat = hangMucMoMoi.reduce((s, x) => s + (x.theoNhom.find((n) => n.nhom === nhom)?.soKhachDat ?? 0), 0);
-    const chiTieuSoKhach = hangMucMoMoi.reduce(
-      (s, x) => s + (x.theoNhom.find((n) => n.nhom === nhom)?.chiTieuSoKhach ?? 0),
-      0
-    );
-    return {
-      nhom,
-      soDon: hangMucMoMoi.reduce((s, x) => s + (x.theoNhom.find((n) => n.nhom === nhom)?.soDon ?? 0), 0),
-      doanhSo: hangMucMoMoi.reduce((s, x) => s + (x.theoNhom.find((n) => n.nhom === nhom)?.doanhSo ?? 0), 0),
-      soKhachDat,
-      chiTieuSoKhach,
-      phanTram: chiTieuSoKhach > 0 ? Math.min(soKhachDat / chiTieuSoKhach, 1.5) * 100 : null,
-    };
-  });
-
   // Danh sách khách hàng để hiển thị tên trong bảng chi tiết (thay vì chỉ mã tổ chức)
   const maKhCanTra = Array.from(new Set(cacDonMoMoi.map((d) => d.maToChuc)));
   const { data: dsKhachHang } =
@@ -335,7 +298,6 @@ export default async function Home() {
       ? await supabase.from("customers").select("ma_to_chuc, ten_to_chuc").in("ma_to_chuc", maKhCanTra)
       : { data: [] as { ma_to_chuc: string; ten_to_chuc: string }[] };
   const tenKhTheoMa = new Map((dsKhachHang ?? []).map((kh) => [kh.ma_to_chuc, kh.ten_to_chuc]));
-  const tenNvTheoMa = new Map((dsNhanVien ?? []).map((nv) => [nv.ma_nv, nv.ten_nv]));
 
   const chiTietMoMoi = [...cacDonMoMoi].sort((a, b) => (a.ngay < b.ngay ? -1 : a.ngay > b.ngay ? 1 : 0));
 
@@ -380,7 +342,7 @@ export default async function Home() {
   }
 
   const chiTietDuyTri = ((mucTieuDuyTri ?? []) as unknown as MucTieuDuyTri[]).map((mt) => {
-    const nhom = mt.products?.nhom_trong_tam ?? mt.ma_sp;
+    const nhom = mt.products?.nhom_trong_tam ?? mt.ma_sp ?? "—";
     const th = mt.ma_to_chuc
       ? soLuongTheoKhachDuyTri.get(`${mt.ma_nv}|${mt.ma_to_chuc}|${nhom}`) ?? 0
       : soLuongTheoNvNhomDuyTri.get(`${mt.ma_nv}|${nhom}`) ?? 0;
@@ -416,9 +378,6 @@ export default async function Home() {
     };
   });
 
-  const tongKhachMucTieuChung = hangMucDuyTri.reduce((s, x) => s + x.tongKhachMucTieu, 0);
-  const tongKhachDatChung = hangMucDuyTri.reduce((s, x) => s + x.soKhachDat, 0);
-
   return (
     <main className="min-h-screen bg-slate-50 pb-16">
       <div className="border-b border-slate-200 bg-white">
@@ -431,333 +390,19 @@ export default async function Home() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-6xl space-y-8 px-6 py-8">
-        {/* ---- Doanh số theo kênh ---- */}
-        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 px-6 py-5">
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-indigo-500" />
-              <h2 className="text-lg font-semibold text-slate-900">Doanh số theo kênh</h2>
-            </div>
-          </div>
-
-          {!soChiTieu ? (
-            <CanhBao>
-              Chưa có dữ liệu chỉ tiêu KPI tháng này trong hệ thống — bảng dưới đây mới chỉ hiển thị{" "}
-              <b>doanh số thực tế</b>, chưa tính được % đạt chỉ tiêu.
-            </CanhBao>
-          ) : null}
-
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] border-collapse">
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50/60">
-                  <th className={thBase}>Nhân viên</th>
-                  <th className={thBase}>Kê đơn / Phòng mạch</th>
-                  <th className={thBase}>Thầu (trần 120%)</th>
-                  <th className={`${thBase} text-right`}>Tổng doanh thu</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {hangMuc.map((nv) => (
-                  <tr key={nv.ma_nv} className="hover:bg-slate-50/60">
-                    <td className={tdBase}>
-                      <span className="font-medium text-slate-900">{nv.ten_nv}</span>{" "}
-                      <span className="text-slate-400">({nv.ma_nv})</span>
-                    </td>
-                    <td className={tdBase}>
-                      <div className="flex items-center gap-2">
-                        <span className="tabular-nums">{dinhDangTien(nv.keDonPhongMach)}</span>
-                        <PhanTram value={nv.phanTramKdPm} />
-                      </div>
-                    </td>
-                    <td className={tdBase}>
-                      <div className="flex items-center gap-2">
-                        <span className="tabular-nums">{dinhDangTien(nv.thau)}</span>
-                        <PhanTram value={nv.phanTramThau} />
-                      </div>
-                    </td>
-                    <td className={`${tdBase} text-right font-semibold text-slate-900`}>
-                      {dinhDangTien(nv.tongCong)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t-2 border-slate-200 bg-slate-50/60">
-                  <td className={tfootTd}>Tổng team</td>
-                  <td className={tfootTd}>{dinhDangTien(tongDoanhThuKdPm)}</td>
-                  <td className={tfootTd}>{dinhDangTien(tongDoanhThuThau)}</td>
-                  <td className={`${tfootTd} text-right`}>{dinhDangTien(tongDoanhThuThau + tongDoanhThuKdPm)}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </section>
-
-        {/* ---- Mở mới sản phẩm ---- */}
-        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 px-6 py-5">
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              <h2 className="text-lg font-semibold text-slate-900">Mở mới sản phẩm</h2>
-            </div>
-          </div>
-
-          {!soChiTieu ? (
-            <CanhBao>
-              Chưa có dữ liệu chỉ tiêu KPI tháng này trong hệ thống — bảng dưới đây mới chỉ hiển thị{" "}
-              <b>doanh số Mở mới thực tế</b>, chưa tính được % đạt chỉ tiêu.
-            </CanhBao>
-          ) : null}
-
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] border-collapse">
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50/60">
-                  <th className={thBase}>Nhân viên</th>
-                  {NHOM_SAN_PHAM_TRONG_TAM.map((nhom) => (
-                    <th key={nhom} className={thBase}>
-                      {nhom}
-                    </th>
-                  ))}
-                  <th className={`${thBase} text-right`}>Tổng số đơn</th>
-                  <th className={`${thBase} text-right`}>Tổng doanh số</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {hangMucMoMoi.map((nv) => (
-                  <tr key={nv.ma_nv} className="hover:bg-slate-50/60">
-                    <td className={tdBase}>
-                      <span className="font-medium text-slate-900">{nv.ten_nv}</span>{" "}
-                      <span className="text-slate-400">({nv.ma_nv})</span>
-                    </td>
-                    {nv.theoNhom.map((n) => (
-                      <td className={tdBase} key={n.nhom}>
-                        <OTietMoMoi n={n} />
-                      </td>
-                    ))}
-                    <td className={`${tdBase} text-right tabular-nums`}>{nv.soDonMoMoi}</td>
-                    <td className={`${tdBase} text-right font-semibold text-slate-900`}>
-                      {dinhDangTien(nv.doanhSoMoMoi)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t-2 border-slate-200 bg-slate-50/60">
-                  <td className={tfootTd}>Tổng team</td>
-                  {tongTheoNhomChung.map((n) => (
-                    <td className={tfootTd} key={n.nhom}>
-                      <OTietMoMoi n={n} />
-                    </td>
-                  ))}
-                  <td className={`${tfootTd} text-right`}>{tongSoDonMoMoi}</td>
-                  <td className={`${tfootTd} text-right`}>{dinhDangTien(tongDoanhSoMoMoi)}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-
-          {chiTietMoMoi.length > 0 ? (
-            <details className="group border-t border-slate-100 px-6 py-4">
-              <summary className="cursor-pointer select-none text-sm font-medium text-indigo-600 hover:text-indigo-700">
-                Xem chi tiết từng đơn Mở mới ({chiTietMoMoi.length} đơn)
-              </summary>
-              <div className="mt-3 overflow-x-auto">
-                <table className="w-full min-w-[720px] border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-100">
-                      <th className={thBase}>Ngày</th>
-                      <th className={thBase}>Nhân viên</th>
-                      <th className={thBase}>Khách hàng</th>
-                      <th className={thBase}>Sản phẩm</th>
-                      <th className={thBase}>Kênh</th>
-                      <th className={`${thBase} text-right`}>Số tiền</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {chiTietMoMoi.map((don, i) => (
-                      <tr key={i} className="hover:bg-slate-50/60">
-                        <td className={tdBase}>{don.ngay}</td>
-                        <td className={tdBase}>
-                          {tenNvTheoMa.get(don.maNv) ?? don.maNv}{" "}
-                          <span className="text-slate-400">({don.maNv})</span>
-                        </td>
-                        <td className={tdBase}>
-                          {tenKhTheoMa.get(don.maToChuc) ?? don.maToChuc}{" "}
-                          <span className="text-slate-400">({don.maToChuc})</span>
-                        </td>
-                        <td className={tdBase}>{don.nhom}</td>
-                        <td className={tdBase}>{don.kenh}</td>
-                        <td className={`${tdBase} text-right tabular-nums`}>{dinhDangTien(don.tongTien)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </details>
-          ) : null}
-        </section>
-
-        {/* ---- Duy trì sản phẩm ---- */}
-        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 px-6 py-5">
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-violet-500" />
-              <h2 className="text-lg font-semibold text-slate-900">Duy trì sản phẩm</h2>
-            </div>
-          </div>
-
-          {chiTietDuyTri.length === 0 ? (
-            <CanhBao>
-              Chưa có danh sách khách hàng mục tiêu + chỉ tiêu sản lượng Duy trì tháng này trong hệ thống — nạp dữ
-              liệu chỉ tiêu vào để tính tiếp.
-            </CanhBao>
-          ) : null}
-
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] border-collapse">
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50/60">
-                  <th className={thBase}>Nhân viên</th>
-                  <th className={thBase}>Khách đạt / Tổng mục tiêu</th>
-                  <th className={`${thBase} text-right`}>Tỉ lệ đạt</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {hangMucDuyTri.map((nv) => (
-                  <tr key={nv.ma_nv} className="hover:bg-slate-50/60">
-                    <td className={tdBase}>
-                      <span className="font-medium text-slate-900">{nv.ten_nv}</span>{" "}
-                      <span className="text-slate-400">({nv.ma_nv})</span>
-                    </td>
-                    <td className={`${tdBase} tabular-nums`}>
-                      {nv.soKhachDat} / {nv.tongKhachMucTieu}
-                    </td>
-                    <td className={`${tdBase} text-right`}>
-                      {nv.tongKhachMucTieu > 0 ? <PhanTram value={nv.tyLeDat} /> : <span className="text-slate-300">–</span>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t-2 border-slate-200 bg-slate-50/60">
-                  <td className={tfootTd}>Tổng team</td>
-                  <td className={tfootTd}>
-                    {tongKhachDatChung} / {tongKhachMucTieuChung}
-                  </td>
-                  <td className={`${tfootTd} text-right`}>
-                    {tongKhachMucTieuChung > 0 ? (
-                      <PhanTram value={(tongKhachDatChung / tongKhachMucTieuChung) * 100} />
-                    ) : (
-                      "–"
-                    )}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-
-          {chiTietDuyTri.length > 0 ? (
-            <details className="group border-t border-slate-100 px-6 py-4">
-              <summary className="cursor-pointer select-none text-sm font-medium text-indigo-600 hover:text-indigo-700">
-                Xem chi tiết từng khách hàng mục tiêu ({chiTietDuyTri.length})
-              </summary>
-              <div className="mt-3 overflow-x-auto">
-                <table className="w-full min-w-[680px] border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-100">
-                      <th className={thBase}>Nhân viên</th>
-                      <th className={thBase}>Khách hàng</th>
-                      <th className={thBase}>Sản phẩm</th>
-                      <th className={`${thBase} text-right`}>Chỉ tiêu (SL)</th>
-                      <th className={`${thBase} text-right`}>Thực hiện (SL)</th>
-                      <th className={`${thBase} text-right`}>% đạt</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {chiTietDuyTri.map((ct, i) => (
-                      <tr key={i} className="hover:bg-slate-50/60">
-                        <td className={tdBase}>
-                          {tenNvTheoMa.get(ct.maNv) ?? ct.maNv} <span className="text-slate-400">({ct.maNv})</span>
-                        </td>
-                        <td className={tdBase}>
-                          {ct.tenKh}
-                          {ct.maToChuc ? <span className="text-slate-400"> ({ct.maToChuc})</span> : null}
-                        </td>
-                        <td className={tdBase}>{ct.nhom}</td>
-                        <td className={`${tdBase} text-right tabular-nums`}>{ct.kh}</td>
-                        <td className={`${tdBase} text-right tabular-nums`}>{ct.th}</td>
-                        <td className={`${tdBase} text-right`}>
-                          <PhanTram value={ct.phanTram} />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </details>
-          ) : null}
-        </section>
+      <div className="mx-auto max-w-6xl px-6 py-8">
+        <ChonNhanVienXemKpi
+          soChiTieu={soChiTieu}
+          dsNhanVien={dsNhanVien ?? []}
+          maNvMacDinh={hoSo.ma_nv}
+          hangMuc={hangMuc}
+          hangMucMoMoi={hangMucMoMoi}
+          hangMucDuyTri={hangMucDuyTri}
+          chiTietMoMoi={chiTietMoMoi}
+          chiTietDuyTri={chiTietDuyTri}
+          tenKhTheoMa={Object.fromEntries(tenKhTheoMa)}
+        />
       </div>
     </main>
   );
-}
-
-const thBase = "px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500";
-const tdBase = "px-4 py-3 text-sm text-slate-700";
-const tfootTd = "px-4 py-3 text-sm font-semibold text-slate-900";
-
-function CanhBao({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mx-6 mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800">
-      {children}
-    </div>
-  );
-}
-
-function PhanTram({ value }: { value: number | null }) {
-  if (value === null) {
-    return <span className="text-slate-300">–</span>;
-  }
-  const mau =
-    value >= 100
-      ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20"
-      : value >= 50
-        ? "bg-amber-50 text-amber-700 ring-amber-600/20"
-        : "bg-rose-50 text-rose-700 ring-rose-600/20";
-  return (
-    <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${mau}`}>
-      {value.toFixed(0)}%
-    </span>
-  );
-}
-
-type OTietMoMoiProps = {
-  n: { nhom: string; soDon: number; doanhSo: number; soKhachDat: number; chiTieuSoKhach: number; phanTram: number | null };
-};
-
-function OTietMoMoi({ n }: OTietMoMoiProps) {
-  if (n.chiTieuSoKhach > 0) {
-    return (
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-2">
-          <span className="tabular-nums text-slate-900">
-            {n.soKhachDat}/{n.chiTieuSoKhach} khách
-          </span>
-          <PhanTram value={n.phanTram} />
-        </div>
-        {n.soDon > 0 ? <span className="text-xs text-slate-400">{dinhDangTien(n.doanhSo)}</span> : null}
-      </div>
-    );
-  }
-  if (n.soDon > 0) {
-    return (
-      <span className="tabular-nums">
-        {n.soDon} ({dinhDangTien(n.doanhSo)})
-      </span>
-    );
-  }
-  return <span className="text-slate-300">–</span>;
 }
