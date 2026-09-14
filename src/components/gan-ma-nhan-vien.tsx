@@ -37,32 +37,49 @@ export default function GanMaNhanVien({ userId }: { userId: string }) {
   }
 
   return (
-    <main style={{ maxWidth: 360, margin: "4rem auto", padding: "0 1rem", fontFamily: "sans-serif" }}>
-      <h1 style={{ fontSize: "1.2rem", marginBottom: "1rem" }}>Hoàn tất hồ sơ</h1>
-      <p style={{ marginBottom: "1rem", fontSize: "0.9rem" }}>
-        Tài khoản của bạn chưa được gắn với 1 mã nhân viên trong team. Chọn tên của bạn bên dưới:
-      </p>
-      <form onSubmit={xuLy} style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-        <select
-          required
-          value={maNv}
-          onChange={(e) => setMaNv(e.target.value)}
-          style={{ padding: "6px 8px" }}
+    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+      <div className="w-full max-w-sm">
+        <div className="mb-6 text-center">
+          <p className="text-sm font-medium text-indigo-600">Web quản lý KPI</p>
+          <h1 className="mt-1 text-xl font-semibold text-slate-900">Hoàn tất hồ sơ</h1>
+        </div>
+
+        <form
+          onSubmit={xuLy}
+          className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
         >
-          <option value="" disabled>
-            -- Chọn tên trong danh sách --
-          </option>
-          {danhSachNv.map((nv) => (
-            <option key={nv.ma_nv} value={nv.ma_nv}>
-              {nv.ten_nv} ({nv.ma_nv})
+          <p className="text-sm text-slate-600">
+            Tài khoản của bạn chưa được gắn với 1 mã nhân viên trong team. Chọn tên của bạn bên dưới:
+          </p>
+          <select
+            required
+            value={maNv}
+            onChange={(e) => setMaNv(e.target.value)}
+            className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+          >
+            <option value="" disabled>
+              -- Chọn tên trong danh sách --
             </option>
-          ))}
-        </select>
-        {loi && <p style={{ color: "crimson", fontSize: "0.9rem" }}>{loi}</p>}
-        <button type="submit" disabled={dangXuLy} style={{ padding: "8px 12px", cursor: "pointer" }}>
-          {dangXuLy ? "Đang lưu..." : "Xác nhận"}
-        </button>
-      </form>
+            {danhSachNv.map((nv) => (
+              <option key={nv.ma_nv} value={nv.ma_nv}>
+                {nv.ten_nv} ({nv.ma_nv})
+              </option>
+            ))}
+          </select>
+
+          {loi && (
+            <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{loi}</p>
+          )}
+
+          <button
+            type="submit"
+            disabled={dangXuLy}
+            className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {dangXuLy ? "Đang lưu..." : "Xác nhận"}
+          </button>
+        </form>
+      </div>
     </main>
   );
 }

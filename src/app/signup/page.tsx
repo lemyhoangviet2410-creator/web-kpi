@@ -67,57 +67,82 @@ export default function TrangDangKy() {
   }
 
   return (
-    <main style={{ maxWidth: 360, margin: "4rem auto", padding: "0 1rem", fontFamily: "sans-serif" }}>
-      <h1 style={{ fontSize: "1.3rem", marginBottom: "1rem" }}>Đăng ký — Web quản lý KPI</h1>
-      <form onSubmit={xuLyDangKy} style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-        <label>
-          Bạn là
-          <select
-            required
-            value={maNv}
-            onChange={(e) => setMaNv(e.target.value)}
-            style={{ display: "block", width: "100%", padding: "6px 8px", marginTop: 4 }}
-          >
-            <option value="" disabled>
-              -- Chọn tên trong danh sách --
-            </option>
-            {danhSachNv.map((nv) => (
-              <option key={nv.ma_nv} value={nv.ma_nv}>
-                {nv.ten_nv} ({nv.ma_nv})
+    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-10">
+      <div className="w-full max-w-sm">
+        <div className="mb-6 text-center">
+          <p className="text-sm font-medium text-indigo-600">Web quản lý KPI</p>
+          <h1 className="mt-1 text-xl font-semibold text-slate-900">Đăng ký tài khoản</h1>
+        </div>
+
+        <form
+          onSubmit={xuLyDangKy}
+          className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+        >
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Bạn là</span>
+            <select
+              required
+              value={maNv}
+              onChange={(e) => setMaNv(e.target.value)}
+              className="mt-1.5 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+            >
+              <option value="" disabled>
+                -- Chọn tên trong danh sách --
               </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Email
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            style={{ display: "block", width: "100%", padding: "6px 8px", marginTop: 4 }}
-          />
-        </label>
-        <label>
-          Mật khẩu (tối thiểu 6 ký tự)
-          <input
-            type="password"
-            required
-            minLength={6}
-            value={matKhau}
-            onChange={(e) => setMatKhau(e.target.value)}
-            style={{ display: "block", width: "100%", padding: "6px 8px", marginTop: 4 }}
-          />
-        </label>
-        {loi && <p style={{ color: "crimson", fontSize: "0.9rem" }}>{loi}</p>}
-        {thongBao && <p style={{ color: "green", fontSize: "0.9rem" }}>{thongBao}</p>}
-        <button type="submit" disabled={dangXuLy} style={{ padding: "8px 12px", cursor: "pointer" }}>
-          {dangXuLy ? "Đang đăng ký..." : "Đăng ký"}
-        </button>
-      </form>
-      <p style={{ marginTop: "1rem", fontSize: "0.9rem" }}>
-        Đã có tài khoản? <Link href="/login">Đăng nhập</Link>
-      </p>
+              {danhSachNv.map((nv) => (
+                <option key={nv.ma_nv} value={nv.ma_nv}>
+                  {nv.ten_nv} ({nv.ma_nv})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Email</span>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="mt-1.5 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Mật khẩu (tối thiểu 6 ký tự)</span>
+            <input
+              type="password"
+              required
+              minLength={6}
+              value={matKhau}
+              onChange={(e) => setMatKhau(e.target.value)}
+              className="mt-1.5 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+            />
+          </label>
+
+          {loi && (
+            <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{loi}</p>
+          )}
+          {thongBao && (
+            <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+              {thongBao}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={dangXuLy}
+            className="mt-1 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {dangXuLy ? "Đang đăng ký..." : "Đăng ký"}
+          </button>
+        </form>
+
+        <p className="mt-4 text-center text-sm text-slate-500">
+          Đã có tài khoản?{" "}
+          <Link href="/login" className="font-medium text-indigo-600 hover:underline">
+            Đăng nhập
+          </Link>
+        </p>
+      </div>
     </main>
   );
 }

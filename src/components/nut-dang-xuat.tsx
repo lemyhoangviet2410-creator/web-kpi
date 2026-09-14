@@ -16,7 +16,7 @@ export default function NutDangXuat() {
   return (
     <button
       onClick={xuLy}
-      style={{ padding: "4px 10px", fontSize: "0.85rem", cursor: "pointer" }}
+      className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
     >
       Đăng xuất
     </button>

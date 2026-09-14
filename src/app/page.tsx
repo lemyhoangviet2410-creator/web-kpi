@@ -420,327 +420,370 @@ export default async function Home() {
   const tongKhachDatChung = hangMucDuyTri.reduce((s, x) => s + x.soKhachDat, 0);
 
   return (
-    <main style={{ padding: "2rem", fontFamily: "sans-serif", maxWidth: 900, margin: "0 auto" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h1 style={{ fontSize: "1.4rem" }}>Doanh số theo kênh — tháng {tenThang}</h1>
-        <NutDangXuat />
+    <main className="min-h-screen bg-slate-50 pb-16">
+      <div className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+          <div>
+            <p className="text-sm font-medium text-indigo-600">Web quản lý KPI</p>
+            <h1 className="text-xl font-semibold text-slate-900">Team — tháng {tenThang}</h1>
+          </div>
+          <NutDangXuat />
+        </div>
       </div>
 
-      <p style={{ fontSize: "0.85rem", color: "#555", marginTop: "0.5rem", lineHeight: 1.5 }}>
-        Kênh <b>Thầu</b> = các dòng đơn có Mã vụ việc = &quot;TH&quot; (trần điểm 120%).
-        <br />
-        Kênh <b>Kê đơn / Phòng mạch</b> = gộp tất cả mã vụ việc còn lại (PM, KM, KD-PM, 1KD, MINIAPP, WEB, ONLINE...) vì
-        dữ liệu nguồn không có mã riêng tách 2 kênh này (không giới hạn trần).
-        <br />
-        Các dòng chiết khấu/voucher (mã SP VOCHER-CTBH, số tiền âm) đã được cộng dồn vào doanh số theo đúng dấu của nó.
-      </p>
+      <div className="mx-auto max-w-6xl space-y-8 px-6 py-8">
+        {/* ---- Doanh số theo kênh ---- */}
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 px-6 py-5">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-indigo-500" />
+              <h2 className="text-lg font-semibold text-slate-900">Doanh số theo kênh</h2>
+            </div>
+            <p className="mt-2 text-sm leading-relaxed text-slate-500">
+              Kênh <b className="font-medium text-slate-700">Thầu</b> = các dòng đơn có Mã vụ việc =
+              &quot;TH&quot; (trần điểm 120%). Kênh{" "}
+              <b className="font-medium text-slate-700">Kê đơn / Phòng mạch</b> = gộp tất cả mã vụ việc còn lại
+              (không giới hạn trần) vì dữ liệu nguồn không có mã riêng tách 2 kênh này. Các dòng chiết khấu/voucher
+              đã được cộng dồn vào doanh số theo đúng dấu của nó.
+            </p>
+          </div>
 
-      {!soChiTieu ? (
-        <p
-          style={{
-            background: "#fff8e1",
-            border: "1px solid #ffe082",
-            padding: "0.6rem 0.8rem",
-            borderRadius: 4,
-            fontSize: "0.85rem",
-            marginTop: "1rem",
-          }}
-        >
-          Chưa có dữ liệu chỉ tiêu KPI tháng này trong hệ thống (bảng kpi_targets đang trống) — bảng dưới đây mới chỉ
-          hiển thị <b>doanh số thực tế</b>, chưa tính được % đạt chỉ tiêu. Khi có file chỉ tiêu công ty gửi, sẽ nạp vào
-          để tính tiếp %.
-        </p>
-      ) : null}
+          {!soChiTieu ? (
+            <CanhBao>
+              Chưa có dữ liệu chỉ tiêu KPI tháng này trong hệ thống — bảng dưới đây mới chỉ hiển thị{" "}
+              <b>doanh số thực tế</b>, chưa tính được % đạt chỉ tiêu.
+            </CanhBao>
+          ) : null}
 
-      <table style={{ borderCollapse: "collapse", marginTop: "1rem", width: "100%" }}>
-        <thead>
-          <tr>
-            <th style={oThead}>Nhân viên</th>
-            <th style={oThead}>Kê đơn / Phòng mạch</th>
-            <th style={oThead}>% đạt KH</th>
-            <th style={oThead}>Thầu</th>
-            <th style={oThead}>% đạt KH (trần 120%)</th>
-            <th style={oThead}>Tổng doanh thu</th>
-          </tr>
-        </thead>
-        <tbody>
-          {hangMuc.map((nv) => (
-            <tr key={nv.ma_nv}>
-              <td style={oTd}>
-                {nv.ten_nv} <span style={{ color: "#999" }}>({nv.ma_nv})</span>
-              </td>
-              <td style={oTd}>{dinhDangTien(nv.keDonPhongMach)}</td>
-              <td style={oTd}>{nv.phanTramKdPm !== null ? `${nv.phanTramKdPm.toFixed(0)}%` : "–"}</td>
-              <td style={oTd}>{dinhDangTien(nv.thau)}</td>
-              <td style={oTd}>{nv.phanTramThau !== null ? `${nv.phanTramThau.toFixed(0)}%` : "–"}</td>
-              <td style={{ ...oTd, fontWeight: 600 }}>{dinhDangTien(nv.tongCong)}</td>
-            </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td style={{ ...oTd, fontWeight: 700, borderTop: "2px solid #333" }}>Tổng team</td>
-            <td style={{ ...oTd, fontWeight: 700, borderTop: "2px solid #333" }}>
-              {dinhDangTien(tongDoanhThuKdPm)}
-            </td>
-            <td style={{ ...oTd, fontWeight: 700, borderTop: "2px solid #333" }} />
-            <td style={{ ...oTd, fontWeight: 700, borderTop: "2px solid #333" }}>
-              {dinhDangTien(tongDoanhThuThau)}
-            </td>
-            <td style={{ ...oTd, fontWeight: 700, borderTop: "2px solid #333" }} />
-            <td style={{ ...oTd, fontWeight: 700, borderTop: "2px solid #333" }}>
-              {dinhDangTien(tongDoanhThuThau + tongDoanhThuKdPm)}
-            </td>
-          </tr>
-        </tfoot>
-      </table>
-
-      <h2 style={{ fontSize: "1.2rem", marginTop: "2.5rem" }}>Mở mới sản phẩm — tháng {tenThang}</h2>
-
-      <p style={{ fontSize: "0.85rem", color: "#555", marginTop: "0.5rem", lineHeight: 1.5 }}>
-        Chỉ áp dụng cho <b>{NHOM_SAN_PHAM_TRONG_TAM.length} sản phẩm trọng tâm hiện tại: {NHOM_SAN_PHAM_TRONG_TAM.join(", ")}</b>{" "}
-        (danh sách có thể đổi theo quý — nhiều mã SP khác nhau của cùng 1 tên thuốc được gộp làm 1 khi xét).
-        <br />
-        <b>Mở mới</b> = khách hàng mua lại 1 trong các sản phẩm này, qua đúng <b>cùng 1 kênh</b> (Thầu hoặc Kê đơn/Phòng
-        mạch), sau khi đã <b>quá 4 tháng</b> (tính theo đúng ngày mua gần nhất, không theo tháng lịch) không mua — hoặc
-        đây là lần đầu tiên khách mua sản phẩm đó qua kênh đó — <b>và</b> NV đứng đơn lần này{" "}
-        <b>chưa từng bán đúng sản phẩm đó, qua đúng kênh đó, cho đúng khách hàng này trước đây</b>. Nếu vẫn là NV cũ
-        đứng đơn, đơn đó chỉ tính vào doanh số, không tính Mở mới (trần điểm 150%). Cùng khách, cùng sản phẩm nhưng bán
-        qua kênh khác (vd trước mua qua Kê đơn, nay mua qua Thầu) vẫn được tính là 1 cặp Mở mới riêng.
-        <br />
-        Dữ liệu lịch sử trong hệ thống chỉ có từ 1/10/2025 nên với các cặp mua lần đầu thật sự trước mốc này, hệ
-        thống có thể nhầm là &quot;lần đầu tuyệt đối&quot;.
-      </p>
-
-      {!soChiTieu ? (
-        <p
-          style={{
-            background: "#fff8e1",
-            border: "1px solid #ffe082",
-            padding: "0.6rem 0.8rem",
-            borderRadius: 4,
-            fontSize: "0.85rem",
-            marginTop: "1rem",
-          }}
-        >
-          Chưa có dữ liệu chỉ tiêu KPI tháng này trong hệ thống (bảng kpi_targets đang trống) — bảng dưới đây mới chỉ
-          hiển thị <b>doanh số Mở mới thực tế</b>, chưa tính được % đạt chỉ tiêu (trần 150%).
-        </p>
-      ) : null}
-
-      <table style={{ borderCollapse: "collapse", marginTop: "1rem", width: "100%" }}>
-        <thead>
-          <tr>
-            <th style={oThead}>Nhân viên</th>
-            {NHOM_SAN_PHAM_TRONG_TAM.map((nhom) => (
-              <th key={nhom} style={oThead}>
-                {nhom}
-              </th>
-            ))}
-            <th style={oThead}>Tổng số đơn</th>
-            <th style={oThead}>Tổng doanh số</th>
-          </tr>
-        </thead>
-        <tbody>
-          {hangMucMoMoi.map((nv) => (
-            <tr key={nv.ma_nv}>
-              <td style={oTd}>
-                {nv.ten_nv} <span style={{ color: "#999" }}>({nv.ma_nv})</span>
-              </td>
-              {nv.theoNhom.map((n) => (
-                <td style={oTd} key={n.nhom}>
-                  {n.chiTieuSoKhach > 0 ? (
-                    <>
-                      {n.soKhachDat}/{n.chiTieuSoKhach} khách ({n.phanTram !== null ? n.phanTram.toFixed(0) : 0}%)
-                      {n.soDon > 0 ? <><br />{dinhDangTien(n.doanhSo)}</> : null}
-                    </>
-                  ) : n.soDon > 0 ? (
-                    `${n.soDon} (${dinhDangTien(n.doanhSo)})`
-                  ) : (
-                    "–"
-                  )}
-                </td>
-              ))}
-              <td style={oTd}>{nv.soDonMoMoi}</td>
-              <td style={{ ...oTd, fontWeight: 600 }}>{dinhDangTien(nv.doanhSoMoMoi)}</td>
-            </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td style={{ ...oTd, fontWeight: 700, borderTop: "2px solid #333" }}>Tổng team</td>
-            {tongTheoNhomChung.map((n) => (
-              <td style={{ ...oTd, fontWeight: 700, borderTop: "2px solid #333" }} key={n.nhom}>
-                {n.chiTieuSoKhach > 0 ? (
-                  <>
-                    {n.soKhachDat}/{n.chiTieuSoKhach} khách ({n.phanTram !== null ? n.phanTram.toFixed(0) : 0}%)
-                    {n.soDon > 0 ? <><br />{dinhDangTien(n.doanhSo)}</> : null}
-                  </>
-                ) : n.soDon > 0 ? (
-                  `${n.soDon} (${dinhDangTien(n.doanhSo)})`
-                ) : (
-                  "–"
-                )}
-              </td>
-            ))}
-            <td style={{ ...oTd, fontWeight: 700, borderTop: "2px solid #333" }}>{tongSoDonMoMoi}</td>
-            <td style={{ ...oTd, fontWeight: 700, borderTop: "2px solid #333" }}>
-              {dinhDangTien(tongDoanhSoMoMoi)}
-            </td>
-          </tr>
-        </tfoot>
-      </table>
-
-      {chiTietMoMoi.length > 0 ? (
-        <details style={{ marginTop: "1rem" }}>
-          <summary style={{ fontSize: "0.85rem", color: "#555", cursor: "pointer" }}>
-            Xem chi tiết từng đơn Mở mới ({chiTietMoMoi.length} đơn)
-          </summary>
-          <table style={{ borderCollapse: "collapse", marginTop: "0.75rem", width: "100%" }}>
-            <thead>
-              <tr>
-                <th style={oThead}>Ngày</th>
-                <th style={oThead}>Nhân viên</th>
-                <th style={oThead}>Khách hàng</th>
-                <th style={oThead}>Sản phẩm</th>
-                <th style={oThead}>Kênh</th>
-                <th style={oThead}>Số tiền</th>
-              </tr>
-            </thead>
-            <tbody>
-              {chiTietMoMoi.map((don, i) => (
-                <tr key={i}>
-                  <td style={oTd}>{don.ngay}</td>
-                  <td style={oTd}>
-                    {tenNvTheoMa.get(don.maNv) ?? don.maNv} <span style={{ color: "#999" }}>({don.maNv})</span>
-                  </td>
-                  <td style={oTd}>
-                    {tenKhTheoMa.get(don.maToChuc) ?? don.maToChuc}{" "}
-                    <span style={{ color: "#999" }}>({don.maToChuc})</span>
-                  </td>
-                  <td style={oTd}>{don.nhom}</td>
-                  <td style={oTd}>{don.kenh}</td>
-                  <td style={oTd}>{dinhDangTien(don.tongTien)}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px] border-collapse">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50/60">
+                  <th className={thBase}>Nhân viên</th>
+                  <th className={thBase}>Kê đơn / Phòng mạch</th>
+                  <th className={thBase}>Thầu (trần 120%)</th>
+                  <th className={`${thBase} text-right`}>Tổng doanh thu</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </details>
-      ) : null}
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {hangMuc.map((nv) => (
+                  <tr key={nv.ma_nv} className="hover:bg-slate-50/60">
+                    <td className={tdBase}>
+                      <span className="font-medium text-slate-900">{nv.ten_nv}</span>{" "}
+                      <span className="text-slate-400">({nv.ma_nv})</span>
+                    </td>
+                    <td className={tdBase}>
+                      <div className="flex items-center gap-2">
+                        <span className="tabular-nums">{dinhDangTien(nv.keDonPhongMach)}</span>
+                        <PhanTram value={nv.phanTramKdPm} />
+                      </div>
+                    </td>
+                    <td className={tdBase}>
+                      <div className="flex items-center gap-2">
+                        <span className="tabular-nums">{dinhDangTien(nv.thau)}</span>
+                        <PhanTram value={nv.phanTramThau} />
+                      </div>
+                    </td>
+                    <td className={`${tdBase} text-right font-semibold text-slate-900`}>
+                      {dinhDangTien(nv.tongCong)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-slate-200 bg-slate-50/60">
+                  <td className={tfootTd}>Tổng team</td>
+                  <td className={tfootTd}>{dinhDangTien(tongDoanhThuKdPm)}</td>
+                  <td className={tfootTd}>{dinhDangTien(tongDoanhThuThau)}</td>
+                  <td className={`${tfootTd} text-right`}>{dinhDangTien(tongDoanhThuThau + tongDoanhThuKdPm)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </section>
 
-      <h2 style={{ fontSize: "1.2rem", marginTop: "2.5rem" }}>Duy trì sản phẩm — tháng {tenThang}</h2>
+        {/* ---- Mở mới sản phẩm ---- */}
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 px-6 py-5">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              <h2 className="text-lg font-semibold text-slate-900">Mở mới sản phẩm</h2>
+            </div>
+            <p className="mt-2 text-sm leading-relaxed text-slate-500">
+              Chỉ áp dụng cho <b className="font-medium text-slate-700">{NHOM_SAN_PHAM_TRONG_TAM.length} sản phẩm
+              trọng tâm: {NHOM_SAN_PHAM_TRONG_TAM.join(", ")}</b>. <b className="font-medium text-slate-700">Mở
+              mới</b> = khách hàng mua lại 1 trong các sản phẩm này, qua đúng cùng 1 kênh, sau khi đã{" "}
+              <b className="font-medium text-slate-700">quá 4 tháng</b> không mua (tính theo đúng ngày, không theo
+              tháng lịch) — hoặc lần đầu tiên mua qua kênh đó — và NV đứng đơn chưa từng bán đúng sản phẩm/kênh đó
+              cho đúng khách này trước đây. Cùng khách, cùng sản phẩm nhưng bán qua kênh khác vẫn tính là 1 cặp Mở
+              mới riêng (trần điểm 150%).
+              <br />
+              Dữ liệu lịch sử trong hệ thống chỉ có từ 1/10/2025 nên với các cặp mua lần đầu thật sự trước mốc này,
+              hệ thống có thể nhầm là &quot;lần đầu tuyệt đối&quot;.
+            </p>
+          </div>
 
-      <p style={{ fontSize: "0.85rem", color: "#555", marginTop: "0.5rem", lineHeight: 1.5 }}>
-        Chỉ áp dụng cho <b>{NHOM_SAN_PHAM_TRONG_TAM.length} sản phẩm trọng tâm hiện tại: {NHOM_SAN_PHAM_TRONG_TAM.join(", ")}</b>.
-        Khác với Mở mới, Duy trì tính theo <b>sản lượng</b> (không phải tiền) mỗi NV bán được cho từng sản phẩm, đối
-        chiếu với chỉ tiêu công ty giao (có thể giao theo khách hàng cụ thể, hoặc chỉ tiêu tổng theo NV+sản phẩm nếu
-        công ty chưa breakdown theo khách). % đạt = sản lượng đã bán / chỉ tiêu sản lượng, <b>trần 100%</b> (không có
-        điểm vượt cho Duy trì).
-      </p>
+          {!soChiTieu ? (
+            <CanhBao>
+              Chưa có dữ liệu chỉ tiêu KPI tháng này trong hệ thống — bảng dưới đây mới chỉ hiển thị{" "}
+              <b>doanh số Mở mới thực tế</b>, chưa tính được % đạt chỉ tiêu.
+            </CanhBao>
+          ) : null}
 
-      {chiTietDuyTri.length === 0 ? (
-        <p
-          style={{
-            background: "#fff8e1",
-            border: "1px solid #ffe082",
-            padding: "0.6rem 0.8rem",
-            borderRadius: 4,
-            fontSize: "0.85rem",
-            marginTop: "1rem",
-          }}
-        >
-          Chưa có danh sách khách hàng mục tiêu + chỉ tiêu sản lượng Duy trì tháng này trong hệ thống (bảng
-          kpi_targets chưa có dòng nào với loai_kpi=&quot;duy_tri&quot; cho tháng {tenThang}) — nạp dữ liệu chỉ tiêu
-          vào để tính tiếp.
-        </p>
-      ) : null}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[820px] border-collapse">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50/60">
+                  <th className={thBase}>Nhân viên</th>
+                  {NHOM_SAN_PHAM_TRONG_TAM.map((nhom) => (
+                    <th key={nhom} className={thBase}>
+                      {nhom}
+                    </th>
+                  ))}
+                  <th className={`${thBase} text-right`}>Tổng số đơn</th>
+                  <th className={`${thBase} text-right`}>Tổng doanh số</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {hangMucMoMoi.map((nv) => (
+                  <tr key={nv.ma_nv} className="hover:bg-slate-50/60">
+                    <td className={tdBase}>
+                      <span className="font-medium text-slate-900">{nv.ten_nv}</span>{" "}
+                      <span className="text-slate-400">({nv.ma_nv})</span>
+                    </td>
+                    {nv.theoNhom.map((n) => (
+                      <td className={tdBase} key={n.nhom}>
+                        <OTietMoMoi n={n} />
+                      </td>
+                    ))}
+                    <td className={`${tdBase} text-right tabular-nums`}>{nv.soDonMoMoi}</td>
+                    <td className={`${tdBase} text-right font-semibold text-slate-900`}>
+                      {dinhDangTien(nv.doanhSoMoMoi)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-slate-200 bg-slate-50/60">
+                  <td className={tfootTd}>Tổng team</td>
+                  {tongTheoNhomChung.map((n) => (
+                    <td className={tfootTd} key={n.nhom}>
+                      <OTietMoMoi n={n} />
+                    </td>
+                  ))}
+                  <td className={`${tfootTd} text-right`}>{tongSoDonMoMoi}</td>
+                  <td className={`${tfootTd} text-right`}>{dinhDangTien(tongDoanhSoMoMoi)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
 
-      <table style={{ borderCollapse: "collapse", marginTop: "1rem", width: "100%" }}>
-        <thead>
-          <tr>
-            <th style={oThead}>Nhân viên</th>
-            <th style={oThead}>Số khách đạt chỉ tiêu</th>
-            <th style={oThead}>Tổng khách mục tiêu</th>
-            <th style={oThead}>Tỉ lệ đạt</th>
-          </tr>
-        </thead>
-        <tbody>
-          {hangMucDuyTri.map((nv) => (
-            <tr key={nv.ma_nv}>
-              <td style={oTd}>
-                {nv.ten_nv} <span style={{ color: "#999" }}>({nv.ma_nv})</span>
-              </td>
-              <td style={oTd}>{nv.soKhachDat}</td>
-              <td style={oTd}>{nv.tongKhachMucTieu}</td>
-              <td style={{ ...oTd, fontWeight: 600 }}>
-                {nv.tongKhachMucTieu > 0 ? `${nv.tyLeDat.toFixed(0)}%` : "–"}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td style={{ ...oTd, fontWeight: 700, borderTop: "2px solid #333" }}>Tổng team</td>
-            <td style={{ ...oTd, fontWeight: 700, borderTop: "2px solid #333" }}>{tongKhachDatChung}</td>
-            <td style={{ ...oTd, fontWeight: 700, borderTop: "2px solid #333" }}>{tongKhachMucTieuChung}</td>
-            <td style={{ ...oTd, fontWeight: 700, borderTop: "2px solid #333" }}>
-              {tongKhachMucTieuChung > 0 ? `${((tongKhachDatChung / tongKhachMucTieuChung) * 100).toFixed(0)}%` : "–"}
-            </td>
-          </tr>
-        </tfoot>
-      </table>
+          {chiTietMoMoi.length > 0 ? (
+            <details className="group border-t border-slate-100 px-6 py-4">
+              <summary className="cursor-pointer select-none text-sm font-medium text-indigo-600 hover:text-indigo-700">
+                Xem chi tiết từng đơn Mở mới ({chiTietMoMoi.length} đơn)
+              </summary>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full min-w-[720px] border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-100">
+                      <th className={thBase}>Ngày</th>
+                      <th className={thBase}>Nhân viên</th>
+                      <th className={thBase}>Khách hàng</th>
+                      <th className={thBase}>Sản phẩm</th>
+                      <th className={thBase}>Kênh</th>
+                      <th className={`${thBase} text-right`}>Số tiền</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {chiTietMoMoi.map((don, i) => (
+                      <tr key={i} className="hover:bg-slate-50/60">
+                        <td className={tdBase}>{don.ngay}</td>
+                        <td className={tdBase}>
+                          {tenNvTheoMa.get(don.maNv) ?? don.maNv}{" "}
+                          <span className="text-slate-400">({don.maNv})</span>
+                        </td>
+                        <td className={tdBase}>
+                          {tenKhTheoMa.get(don.maToChuc) ?? don.maToChuc}{" "}
+                          <span className="text-slate-400">({don.maToChuc})</span>
+                        </td>
+                        <td className={tdBase}>{don.nhom}</td>
+                        <td className={tdBase}>{don.kenh}</td>
+                        <td className={`${tdBase} text-right tabular-nums`}>{dinhDangTien(don.tongTien)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          ) : null}
+        </section>
 
-      {chiTietDuyTri.length > 0 ? (
-        <details style={{ marginTop: "1rem" }}>
-          <summary style={{ fontSize: "0.85rem", color: "#555", cursor: "pointer" }}>
-            Xem chi tiết từng khách hàng mục tiêu ({chiTietDuyTri.length})
-          </summary>
-          <table style={{ borderCollapse: "collapse", marginTop: "0.75rem", width: "100%" }}>
-            <thead>
-              <tr>
-                <th style={oThead}>Nhân viên</th>
-                <th style={oThead}>Khách hàng</th>
-                <th style={oThead}>Sản phẩm</th>
-                <th style={oThead}>Chỉ tiêu (SL)</th>
-                <th style={oThead}>Thực hiện (SL)</th>
-                <th style={oThead}>% đạt</th>
-              </tr>
-            </thead>
-            <tbody>
-              {chiTietDuyTri.map((ct, i) => (
-                <tr key={i}>
-                  <td style={oTd}>
-                    {tenNvTheoMa.get(ct.maNv) ?? ct.maNv} <span style={{ color: "#999" }}>({ct.maNv})</span>
+        {/* ---- Duy trì sản phẩm ---- */}
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 px-6 py-5">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-violet-500" />
+              <h2 className="text-lg font-semibold text-slate-900">Duy trì sản phẩm</h2>
+            </div>
+            <p className="mt-2 text-sm leading-relaxed text-slate-500">
+              Chỉ áp dụng cho <b className="font-medium text-slate-700">{NHOM_SAN_PHAM_TRONG_TAM.length} sản phẩm
+              trọng tâm: {NHOM_SAN_PHAM_TRONG_TAM.join(", ")}</b>. Khác với Mở mới, Duy trì tính theo{" "}
+              <b className="font-medium text-slate-700">sản lượng</b> (không phải tiền) mỗi NV bán được cho từng sản
+              phẩm, đối chiếu với chỉ tiêu công ty giao (theo khách hàng cụ thể, hoặc chỉ tiêu tổng theo NV+sản phẩm
+              nếu công ty chưa breakdown theo khách). % đạt = sản lượng đã bán / chỉ tiêu, <b className="font-medium text-slate-700">trần 100%</b>.
+            </p>
+          </div>
+
+          {chiTietDuyTri.length === 0 ? (
+            <CanhBao>
+              Chưa có danh sách khách hàng mục tiêu + chỉ tiêu sản lượng Duy trì tháng này trong hệ thống — nạp dữ
+              liệu chỉ tiêu vào để tính tiếp.
+            </CanhBao>
+          ) : null}
+
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px] border-collapse">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50/60">
+                  <th className={thBase}>Nhân viên</th>
+                  <th className={thBase}>Khách đạt / Tổng mục tiêu</th>
+                  <th className={`${thBase} text-right`}>Tỉ lệ đạt</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {hangMucDuyTri.map((nv) => (
+                  <tr key={nv.ma_nv} className="hover:bg-slate-50/60">
+                    <td className={tdBase}>
+                      <span className="font-medium text-slate-900">{nv.ten_nv}</span>{" "}
+                      <span className="text-slate-400">({nv.ma_nv})</span>
+                    </td>
+                    <td className={`${tdBase} tabular-nums`}>
+                      {nv.soKhachDat} / {nv.tongKhachMucTieu}
+                    </td>
+                    <td className={`${tdBase} text-right`}>
+                      {nv.tongKhachMucTieu > 0 ? <PhanTram value={nv.tyLeDat} /> : <span className="text-slate-300">–</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-slate-200 bg-slate-50/60">
+                  <td className={tfootTd}>Tổng team</td>
+                  <td className={tfootTd}>
+                    {tongKhachDatChung} / {tongKhachMucTieuChung}
                   </td>
-                  <td style={oTd}>
-                    {ct.tenKh}
-                    {ct.maToChuc ? <span style={{ color: "#999" }}> ({ct.maToChuc})</span> : null}
-                  </td>
-                  <td style={oTd}>{ct.nhom}</td>
-                  <td style={oTd}>{ct.kh}</td>
-                  <td style={oTd}>{ct.th}</td>
-                  <td style={{ ...oTd, color: ct.dat ? "#2e7d32" : "#c62828", fontWeight: 600 }}>
-                    {ct.phanTram.toFixed(0)}%
+                  <td className={`${tfootTd} text-right`}>
+                    {tongKhachMucTieuChung > 0 ? (
+                      <PhanTram value={(tongKhachDatChung / tongKhachMucTieuChung) * 100} />
+                    ) : (
+                      "–"
+                    )}
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </details>
-      ) : null}
+              </tfoot>
+            </table>
+          </div>
+
+          {chiTietDuyTri.length > 0 ? (
+            <details className="group border-t border-slate-100 px-6 py-4">
+              <summary className="cursor-pointer select-none text-sm font-medium text-indigo-600 hover:text-indigo-700">
+                Xem chi tiết từng khách hàng mục tiêu ({chiTietDuyTri.length})
+              </summary>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full min-w-[680px] border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-100">
+                      <th className={thBase}>Nhân viên</th>
+                      <th className={thBase}>Khách hàng</th>
+                      <th className={thBase}>Sản phẩm</th>
+                      <th className={`${thBase} text-right`}>Chỉ tiêu (SL)</th>
+                      <th className={`${thBase} text-right`}>Thực hiện (SL)</th>
+                      <th className={`${thBase} text-right`}>% đạt</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {chiTietDuyTri.map((ct, i) => (
+                      <tr key={i} className="hover:bg-slate-50/60">
+                        <td className={tdBase}>
+                          {tenNvTheoMa.get(ct.maNv) ?? ct.maNv} <span className="text-slate-400">({ct.maNv})</span>
+                        </td>
+                        <td className={tdBase}>
+                          {ct.tenKh}
+                          {ct.maToChuc ? <span className="text-slate-400"> ({ct.maToChuc})</span> : null}
+                        </td>
+                        <td className={tdBase}>{ct.nhom}</td>
+                        <td className={`${tdBase} text-right tabular-nums`}>{ct.kh}</td>
+                        <td className={`${tdBase} text-right tabular-nums`}>{ct.th}</td>
+                        <td className={`${tdBase} text-right`}>
+                          <PhanTram value={ct.phanTram} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          ) : null}
+        </section>
+      </div>
     </main>
   );
 }
 
-const oThead: React.CSSProperties = {
-  textAlign: "left",
-  borderBottom: "1px solid #ccc",
-  padding: "6px 12px",
-  fontSize: "0.85rem",
-  color: "#555",
+const thBase = "px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500";
+const tdBase = "px-4 py-3 text-sm text-slate-700";
+const tfootTd = "px-4 py-3 text-sm font-semibold text-slate-900";
+
+function CanhBao({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mx-6 mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800">
+      {children}
+    </div>
+  );
+}
+
+function PhanTram({ value }: { value: number | null }) {
+  if (value === null) {
+    return <span className="text-slate-300">–</span>;
+  }
+  const mau =
+    value >= 100
+      ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20"
+      : value >= 50
+        ? "bg-amber-50 text-amber-700 ring-amber-600/20"
+        : "bg-rose-50 text-rose-700 ring-rose-600/20";
+  return (
+    <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${mau}`}>
+      {value.toFixed(0)}%
+    </span>
+  );
+}
+
+type OTietMoMoiProps = {
+  n: { nhom: string; soDon: number; doanhSo: number; soKhachDat: number; chiTieuSoKhach: number; phanTram: number | null };
 };
-const oTd: React.CSSProperties = {
-  padding: "6px 12px",
-  borderBottom: "1px solid #eee",
-  fontSize: "0.9rem",
-};
+
+function OTietMoMoi({ n }: OTietMoMoiProps) {
+  if (n.chiTieuSoKhach > 0) {
+    return (
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-2">
+          <span className="tabular-nums text-slate-900">
+            {n.soKhachDat}/{n.chiTieuSoKhach} khách
+          </span>
+          <PhanTram value={n.phanTram} />
+        </div>
+        {n.soDon > 0 ? <span className="text-xs text-slate-400">{dinhDangTien(n.doanhSo)}</span> : null}
+      </div>
+    );
+  }
+  if (n.soDon > 0) {
+    return (
+      <span className="tabular-nums">
+        {n.soDon} ({dinhDangTien(n.doanhSo)})
+      </span>
+    );
+  }
+  return <span className="text-slate-300">–</span>;
+}
