@@ -11,6 +11,11 @@ function themThang(ngay: Date, soThang: number): Date {
   return new Date(Date.UTC(ngay.getUTCFullYear(), ngay.getUTCMonth() + soThang, ngay.getUTCDate()));
 }
 
+// Danh sách "sản phẩm trọng tâm" hiện tại — khớp với cột products.nhom_trong_tam.
+// Danh sách này có thể đổi theo quý (xem đề bài mục 2, 15) — khi đổi, cập nhật ở đây và
+// trong dữ liệu cột nhom_trong_tam.
+const NHOM_SAN_PHAM_TRONG_TAM = ["Fosmitic", "Progermila", "Tranfast"] as const;
+
 export default async function Home() {
   const supabase = await createClient();
 
@@ -140,7 +145,10 @@ export default async function Home() {
   }
   // Mỗi mảng trong theoCapKhNhom đã đúng thứ tự thời gian nhờ câu query .order() ở trên.
 
-  const tongMoMoiTheoNv = new Map<string, { doanhSo: number; soDon: number }>();
+  // Chi tiết từng đơn Mở mới hợp lệ trong tháng — dùng để: (a) cộng tổng theo NV, (b) hiển thị
+  // rõ NV đó mở được sản phẩm trọng tâm nào (Việt yêu cầu 14/9/2026), (c) bảng chi tiết bên dưới.
+  type DonMoMoi = { maNv: string; maToChuc: string; nhom: string; ngay: string; tongTien: number };
+  const cacDonMoMoi: DonMoMoi[] = [];
 
   for (const ds of theoCapKhNhom.values()) {
     const nvDaBan = new Set<string>();
@@ -148,6 +156,7 @@ export default async function Home() {
 
     for (const dong of ds) {
       const maNv = dong.ma_nv as string;
+      const nhom = dong.products?.nhom_trong_tam as string;
       const ngayHienTai = new Date(dong.ngay_chung_tu + "T00:00:00Z");
       const laLanDauTuyetDoi = ngayTruoc === null;
       const duKhoangNghi = ngayTruoc !== null && ngayHienTai.getTime() > themThang(ngayTruoc, 4).getTime();
@@ -155,10 +164,13 @@ export default async function Home() {
 
       if ((laLanDauTuyetDoi || duKhoangNghi) && nvChuaTungBan) {
         if (dong.ngay_chung_tu >= dauThang && dong.ngay_chung_tu < dauThangSau) {
-          const hienTai = tongMoMoiTheoNv.get(maNv) ?? { doanhSo: 0, soDon: 0 };
-          hienTai.doanhSo += Number(dong.tong_tien);
-          hienTai.soDon += 1;
-          tongMoMoiTheoNv.set(maNv, hienTai);
+          cacDonMoMoi.push({
+            maNv,
+            maToChuc: dong.ma_to_chuc as string,
+            nhom,
+            ngay: dong.ngay_chung_tu,
+            tongTien: Number(dong.tong_tien),
+          });
         }
       }
 
@@ -167,13 +179,54 @@ export default async function Home() {
     }
   }
 
+  type ThongKe = { soDon: number; doanhSo: number };
+  const tongMoMoiTheoNv = new Map<
+    string,
+    { tong: ThongKe; theoNhom: Map<string, ThongKe> }
+  >();
+
+  for (const don of cacDonMoMoi) {
+    const hienTai = tongMoMoiTheoNv.get(don.maNv) ?? { tong: { soDon: 0, doanhSo: 0 }, theoNhom: new Map() };
+    hienTai.tong.soDon += 1;
+    hienTai.tong.doanhSo += don.tongTien;
+    const nhomHienTai = hienTai.theoNhom.get(don.nhom) ?? { soDon: 0, doanhSo: 0 };
+    nhomHienTai.soDon += 1;
+    nhomHienTai.doanhSo += don.tongTien;
+    hienTai.theoNhom.set(don.nhom, nhomHienTai);
+    tongMoMoiTheoNv.set(don.maNv, hienTai);
+  }
+
   const hangMucMoMoi = (dsNhanVien ?? []).map((nv) => {
     const t = tongMoMoiTheoNv.get(nv.ma_nv);
-    return { ...nv, soDonMoMoi: t?.soDon ?? 0, doanhSoMoMoi: t?.doanhSo ?? 0 };
+    return {
+      ...nv,
+      soDonMoMoi: t?.tong.soDon ?? 0,
+      doanhSoMoMoi: t?.tong.doanhSo ?? 0,
+      theoNhom: NHOM_SAN_PHAM_TRONG_TAM.map((nhom) => ({
+        nhom,
+        ...(t?.theoNhom.get(nhom) ?? { soDon: 0, doanhSo: 0 }),
+      })),
+    };
   });
 
   const tongDoanhSoMoMoi = hangMucMoMoi.reduce((s, x) => s + x.doanhSoMoMoi, 0);
   const tongSoDonMoMoi = hangMucMoMoi.reduce((s, x) => s + x.soDonMoMoi, 0);
+  const tongTheoNhomChung = NHOM_SAN_PHAM_TRONG_TAM.map((nhom) => ({
+    nhom,
+    soDon: hangMucMoMoi.reduce((s, x) => s + (x.theoNhom.find((n) => n.nhom === nhom)?.soDon ?? 0), 0),
+    doanhSo: hangMucMoMoi.reduce((s, x) => s + (x.theoNhom.find((n) => n.nhom === nhom)?.doanhSo ?? 0), 0),
+  }));
+
+  // Danh sách khách hàng để hiển thị tên trong bảng chi tiết (thay vì chỉ mã tổ chức)
+  const maKhCanTra = Array.from(new Set(cacDonMoMoi.map((d) => d.maToChuc)));
+  const { data: dsKhachHang } =
+    maKhCanTra.length > 0
+      ? await supabase.from("customers").select("ma_to_chuc, ten_to_chuc").in("ma_to_chuc", maKhCanTra)
+      : { data: [] as { ma_to_chuc: string; ten_to_chuc: string }[] };
+  const tenKhTheoMa = new Map((dsKhachHang ?? []).map((kh) => [kh.ma_to_chuc, kh.ten_to_chuc]));
+  const tenNvTheoMa = new Map((dsNhanVien ?? []).map((nv) => [nv.ma_nv, nv.ten_nv]));
+
+  const chiTietMoMoi = [...cacDonMoMoi].sort((a, b) => (a.ngay < b.ngay ? -1 : a.ngay > b.ngay ? 1 : 0));
 
   return (
     <main style={{ padding: "2rem", fontFamily: "sans-serif", maxWidth: 900, margin: "0 auto" }}>
@@ -280,8 +333,13 @@ export default async function Home() {
         <thead>
           <tr>
             <th style={oThead}>Nhân viên</th>
-            <th style={oThead}>Số đơn Mở mới</th>
-            <th style={oThead}>Doanh số Mở mới</th>
+            {NHOM_SAN_PHAM_TRONG_TAM.map((nhom) => (
+              <th key={nhom} style={oThead}>
+                {nhom}
+              </th>
+            ))}
+            <th style={oThead}>Tổng số đơn</th>
+            <th style={oThead}>Tổng doanh số</th>
           </tr>
         </thead>
         <tbody>
@@ -290,6 +348,11 @@ export default async function Home() {
               <td style={oTd}>
                 {nv.ten_nv} <span style={{ color: "#999" }}>({nv.ma_nv})</span>
               </td>
+              {nv.theoNhom.map((n) => (
+                <td style={oTd} key={n.nhom}>
+                  {n.soDon > 0 ? `${n.soDon} (${dinhDangTien(n.doanhSo)})` : "–"}
+                </td>
+              ))}
               <td style={oTd}>{nv.soDonMoMoi}</td>
               <td style={{ ...oTd, fontWeight: 600 }}>{dinhDangTien(nv.doanhSoMoMoi)}</td>
             </tr>
@@ -298,6 +361,11 @@ export default async function Home() {
         <tfoot>
           <tr>
             <td style={{ ...oTd, fontWeight: 700, borderTop: "2px solid #333" }}>Tổng team</td>
+            {tongTheoNhomChung.map((n) => (
+              <td style={{ ...oTd, fontWeight: 700, borderTop: "2px solid #333" }} key={n.nhom}>
+                {n.soDon > 0 ? `${n.soDon} (${dinhDangTien(n.doanhSo)})` : "–"}
+              </td>
+            ))}
             <td style={{ ...oTd, fontWeight: 700, borderTop: "2px solid #333" }}>{tongSoDonMoMoi}</td>
             <td style={{ ...oTd, fontWeight: 700, borderTop: "2px solid #333" }}>
               {dinhDangTien(tongDoanhSoMoMoi)}
@@ -305,6 +373,41 @@ export default async function Home() {
           </tr>
         </tfoot>
       </table>
+
+      {chiTietMoMoi.length > 0 ? (
+        <details style={{ marginTop: "1rem" }}>
+          <summary style={{ fontSize: "0.85rem", color: "#555", cursor: "pointer" }}>
+            Xem chi tiết từng đơn Mở mới ({chiTietMoMoi.length} đơn)
+          </summary>
+          <table style={{ borderCollapse: "collapse", marginTop: "0.75rem", width: "100%" }}>
+            <thead>
+              <tr>
+                <th style={oThead}>Ngày</th>
+                <th style={oThead}>Nhân viên</th>
+                <th style={oThead}>Khách hàng</th>
+                <th style={oThead}>Sản phẩm</th>
+                <th style={oThead}>Số tiền</th>
+              </tr>
+            </thead>
+            <tbody>
+              {chiTietMoMoi.map((don, i) => (
+                <tr key={i}>
+                  <td style={oTd}>{don.ngay}</td>
+                  <td style={oTd}>
+                    {tenNvTheoMa.get(don.maNv) ?? don.maNv} <span style={{ color: "#999" }}>({don.maNv})</span>
+                  </td>
+                  <td style={oTd}>
+                    {tenKhTheoMa.get(don.maToChuc) ?? don.maToChuc}{" "}
+                    <span style={{ color: "#999" }}>({don.maToChuc})</span>
+                  </td>
+                  <td style={oTd}>{don.nhom}</td>
+                  <td style={oTd}>{dinhDangTien(don.tongTien)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+      ) : null}
     </main>
   );
 }
