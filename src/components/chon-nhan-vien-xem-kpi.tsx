@@ -7,6 +7,8 @@ function dinhDangTien(so: number) {
   return so.toLocaleString("vi-VN") + " đ";
 }
 
+const MA_CA_NHOM = "__ca_nhom__";
+
 type NhanVien = { ma_nv: string; ten_nv: string };
 
 type HangMucDoanhSo = {
@@ -15,6 +17,8 @@ type HangMucDoanhSo = {
   thau: number;
   keDonPhongMach: number;
   tongCong: number;
+  chiTieuKdPm: number;
+  chiTieuThau: number;
   phanTramKdPm: number | null;
   phanTramThau: number | null;
 };
@@ -64,6 +68,21 @@ type ChiTietDuyTri = {
   dat: boolean;
 };
 
+type MucDuoi50 = { ten: string; phanTram: number };
+type DiemKpi = { ma_nv: string; ten_nv: string; diemKhTong: number; diemThTong: number; duoi50: MucDuoi50[] };
+
+type TongCaNhom = {
+  tongDoanhThuKdPm: number;
+  tongChiTieuKdPm: number;
+  tongDoanhThuThau: number;
+  tongChiTieuThau: number;
+  tongTheoNhomChung: TheoNhomMoMoi[];
+  tongSoDonMoMoi: number;
+  tongDoanhSoMoMoi: number;
+  tongKhachDatChung: number;
+  tongKhachMucTieuChung: number;
+};
+
 type Props = {
   soChiTieu: number | null;
   dsNhanVien: NhanVien[];
@@ -74,6 +93,8 @@ type Props = {
   chiTietMoMoi: DonMoMoi[];
   chiTietDuyTri: ChiTietDuyTri[];
   tenKhTheoMa: Record<string, string>;
+  diemKpi: DiemKpi[];
+  tongCaNhom: TongCaNhom;
 };
 
 const thBase = "px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500";
@@ -104,16 +125,20 @@ function PhanTram({ value }: { value: number | null }) {
   );
 }
 
+function KhongAp() {
+  return <span className="italic text-slate-400">Không áp</span>;
+}
+
 function TheThongKe({
   nhan,
   giaTri,
   phanTram,
-  ghiChu,
+  keHoach,
 }: {
   nhan: string;
   giaTri: string;
   phanTram?: number | null;
-  ghiChu?: string;
+  keHoach?: { giaTri: number; ap: boolean; dinhDang: (n: number) => string };
 }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3.5">
@@ -122,7 +147,11 @@ function TheThongKe({
         <span className="text-lg font-semibold tabular-nums text-slate-900">{giaTri}</span>
         {phanTram !== undefined ? <PhanTram value={phanTram} /> : null}
       </div>
-      {ghiChu ? <p className="mt-0.5 text-xs text-slate-400">{ghiChu}</p> : null}
+      {keHoach ? (
+        <p className="mt-1 text-xs text-slate-400">
+          Kế hoạch: {keHoach.ap ? <span className="tabular-nums">{keHoach.dinhDang(keHoach.giaTri)}</span> : <KhongAp />}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -137,16 +166,48 @@ export default function ChonNhanVienXemKpi({
   chiTietMoMoi,
   chiTietDuyTri,
   tenKhTheoMa,
+  diemKpi,
+  tongCaNhom,
 }: Props) {
-  const [maNvDangChon, setMaNvDangChon] = useState(maNvMacDinh);
+  const [maNvDangChon, setMaNvDangChon] = useState<string>(maNvMacDinh);
+  const laCaNhom = maNvDangChon === MA_CA_NHOM;
 
   const nvDoanhSo = hangMuc.find((x) => x.ma_nv === maNvDangChon);
   const nvMoMoi = hangMucMoMoi.find((x) => x.ma_nv === maNvDangChon);
   const nvDuyTri = hangMucDuyTri.find((x) => x.ma_nv === maNvDangChon);
-  const donMoMoiCuaNv = chiTietMoMoi
-    .filter((d) => d.maNv === maNvDangChon)
-    .sort((a, b) => (a.ngay < b.ngay ? -1 : a.ngay > b.ngay ? 1 : 0));
-  const khachDuyTriCuaNv = chiTietDuyTri.filter((d) => d.maNv === maNvDangChon);
+  const nvDiemKpi = diemKpi.find((x) => x.ma_nv === maNvDangChon);
+  const donMoMoiCuaNv = laCaNhom
+    ? chiTietMoMoi
+    : chiTietMoMoi.filter((d) => d.maNv === maNvDangChon);
+  const khachDuyTriCuaNv = laCaNhom
+    ? chiTietDuyTri
+    : chiTietDuyTri.filter((d) => d.maNv === maNvDangChon);
+  const donMoMoiSapXep = [...donMoMoiCuaNv].sort((a, b) => (a.ngay < b.ngay ? -1 : a.ngay > b.ngay ? 1 : 0));
+
+  // Dữ liệu hiển thị cho Doanh số theo kênh — cá nhân hoặc cả nhóm
+  const dsKdPm = laCaNhom ? tongCaNhom.tongDoanhThuKdPm : nvDoanhSo?.keDonPhongMach ?? 0;
+  const dsKdPmKh = laCaNhom ? tongCaNhom.tongChiTieuKdPm : nvDoanhSo?.chiTieuKdPm ?? 0;
+  const dsKdPmPct = laCaNhom
+    ? tongCaNhom.tongChiTieuKdPm > 0
+      ? (tongCaNhom.tongDoanhThuKdPm / tongCaNhom.tongChiTieuKdPm) * 100
+      : null
+    : nvDoanhSo?.phanTramKdPm ?? null;
+  const dsThau = laCaNhom ? tongCaNhom.tongDoanhThuThau : nvDoanhSo?.thau ?? 0;
+  const dsThauKh = laCaNhom ? tongCaNhom.tongChiTieuThau : nvDoanhSo?.chiTieuThau ?? 0;
+  const dsThauPct = laCaNhom
+    ? tongCaNhom.tongChiTieuThau > 0
+      ? Math.min(tongCaNhom.tongDoanhThuThau / tongCaNhom.tongChiTieuThau, 1.2) * 100
+      : null
+    : nvDoanhSo?.phanTramThau ?? null;
+  const dsTong = laCaNhom ? tongCaNhom.tongDoanhThuKdPm + tongCaNhom.tongDoanhThuThau : nvDoanhSo?.tongCong ?? 0;
+
+  const moMoiTheoNhom = laCaNhom ? tongCaNhom.tongTheoNhomChung : nvMoMoi?.theoNhom ?? [];
+  const moMoiSoDon = laCaNhom ? tongCaNhom.tongSoDonMoMoi : nvMoMoi?.soDonMoMoi ?? 0;
+  const moMoiDoanhSo = laCaNhom ? tongCaNhom.tongDoanhSoMoMoi : nvMoMoi?.doanhSoMoMoi ?? 0;
+
+  const duyTriDat = laCaNhom ? tongCaNhom.tongKhachDatChung : nvDuyTri?.soKhachDat ?? 0;
+  const duyTriTong = laCaNhom ? tongCaNhom.tongKhachMucTieuChung : nvDuyTri?.tongKhachMucTieu ?? 0;
+  const duyTriPct = duyTriTong > 0 ? (duyTriDat / duyTriTong) * 100 : null;
 
   return (
     <div className="space-y-8">
@@ -157,6 +218,7 @@ export default function ChonNhanVienXemKpi({
           onChange={(e) => setMaNvDangChon(e.target.value)}
           className="mt-1.5 block w-full max-w-sm rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 sm:w-auto"
         >
+          <option value={MA_CA_NHOM}>Cả nhóm (tổng hợp)</option>
           {dsNhanVien.map((nv) => (
             <option key={nv.ma_nv} value={nv.ma_nv}>
               {nv.ten_nv} ({nv.ma_nv})
@@ -182,15 +244,17 @@ export default function ChonNhanVienXemKpi({
         <div className="grid grid-cols-1 gap-3 p-6 sm:grid-cols-3">
           <TheThongKe
             nhan="Kê đơn / Phòng mạch"
-            giaTri={dinhDangTien(nvDoanhSo?.keDonPhongMach ?? 0)}
-            phanTram={nvDoanhSo?.phanTramKdPm ?? null}
+            giaTri={dinhDangTien(dsKdPm)}
+            phanTram={dsKdPmPct}
+            keHoach={{ giaTri: dsKdPmKh, ap: dsKdPmKh > 0, dinhDang: dinhDangTien }}
           />
           <TheThongKe
             nhan="Thầu (trần 120%)"
-            giaTri={dinhDangTien(nvDoanhSo?.thau ?? 0)}
-            phanTram={nvDoanhSo?.phanTramThau ?? null}
+            giaTri={dinhDangTien(dsThau)}
+            phanTram={dsThauPct}
+            keHoach={{ giaTri: dsThauKh, ap: dsThauKh > 0, dinhDang: dinhDangTien }}
           />
-          <TheThongKe nhan="Tổng doanh thu" giaTri={dinhDangTien(nvDoanhSo?.tongCong ?? 0)} />
+          <TheThongKe nhan="Tổng doanh thu" giaTri={dinhDangTien(dsTong)} />
         </div>
       </section>
 
@@ -209,8 +273,8 @@ export default function ChonNhanVienXemKpi({
         ) : null}
 
         <div className="grid grid-cols-1 gap-3 px-6 pt-6 sm:grid-cols-2">
-          <TheThongKe nhan="Tổng số đơn Mở mới" giaTri={String(nvMoMoi?.soDonMoMoi ?? 0)} />
-          <TheThongKe nhan="Tổng doanh số Mở mới" giaTri={dinhDangTien(nvMoMoi?.doanhSoMoMoi ?? 0)} />
+          <TheThongKe nhan="Tổng số đơn Mở mới" giaTri={String(moMoiSoDon)} />
+          <TheThongKe nhan="Tổng doanh số Mở mới" giaTri={dinhDangTien(moMoiDoanhSo)} />
         </div>
 
         <div className="overflow-x-auto p-6">
@@ -225,15 +289,18 @@ export default function ChonNhanVienXemKpi({
             </thead>
             <tbody className="divide-y divide-slate-100">
               {NHOM_SAN_PHAM_TRONG_TAM.map((nhom) => {
-                const n = nvMoMoi?.theoNhom.find((x) => x.nhom === nhom);
+                const n = moMoiTheoNhom.find((x) => x.nhom === nhom);
+                const coApDung = n && n.chiTieuSoKhach > 0;
+                const coHoatDong = n && n.soDon > 0;
+                if (!coApDung && !coHoatDong) return null; // ẩn SP không áp & không có hoạt động
                 return (
                   <tr key={nhom} className="hover:bg-slate-50/60">
                     <td className={`${tdBase} font-medium text-slate-900`}>{nhom}</td>
                     <td className={`${tdBase} tabular-nums`}>
-                      {n && n.chiTieuSoKhach > 0 ? `${n.soKhachDat}/${n.chiTieuSoKhach} khách` : "–"}
+                      {coApDung ? `${n!.soKhachDat}/${n!.chiTieuSoKhach} khách` : <KhongAp />}
                     </td>
                     <td className={`${tdBase} text-right`}>
-                      <PhanTram value={n?.phanTram ?? null} />
+                      {coApDung ? <PhanTram value={n!.phanTram} /> : <KhongAp />}
                     </td>
                     <td className={`${tdBase} text-right tabular-nums`}>{dinhDangTien(n?.doanhSo ?? 0)}</td>
                   </tr>
@@ -243,10 +310,10 @@ export default function ChonNhanVienXemKpi({
           </table>
         </div>
 
-        {donMoMoiCuaNv.length > 0 ? (
+        {donMoMoiSapXep.length > 0 ? (
           <div className="border-t border-slate-100 px-6 py-5">
             <p className="mb-3 text-sm font-medium text-slate-700">
-              Chi tiết từng đơn Mở mới ({donMoMoiCuaNv.length} đơn)
+              Chi tiết từng đơn Mở mới ({donMoMoiSapXep.length} đơn)
             </p>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[560px] border-collapse">
@@ -260,7 +327,7 @@ export default function ChonNhanVienXemKpi({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {donMoMoiCuaNv.map((don, i) => (
+                  {donMoMoiSapXep.map((don, i) => (
                     <tr key={i} className="hover:bg-slate-50/60">
                       <td className={tdBase}>{don.ngay}</td>
                       <td className={tdBase}>
@@ -286,17 +353,18 @@ export default function ChonNhanVienXemKpi({
           <h2 className="text-lg font-semibold text-slate-900">Duy trì sản phẩm</h2>
         </div>
 
-        {!nvDuyTri || nvDuyTri.tongKhachMucTieu === 0 ? (
+        {duyTriTong === 0 ? (
           <CanhBao>
-            Chưa có danh sách khách hàng mục tiêu + chỉ tiêu sản lượng Duy trì tháng này cho nhân viên này.
+            Chưa có danh sách khách hàng mục tiêu + chỉ tiêu sản lượng Duy trì tháng này
+            {laCaNhom ? " cho cả nhóm" : " cho nhân viên này"}.
           </CanhBao>
         ) : null}
 
         <div className="p-6">
           <TheThongKe
             nhan="Khách hàng đạt chỉ tiêu"
-            giaTri={`${nvDuyTri?.soKhachDat ?? 0} / ${nvDuyTri?.tongKhachMucTieu ?? 0}`}
-            phanTram={nvDuyTri && nvDuyTri.tongKhachMucTieu > 0 ? nvDuyTri.tyLeDat : null}
+            giaTri={`${duyTriDat} / ${duyTriTong}`}
+            phanTram={duyTriTong > 0 ? duyTriPct : null}
           />
         </div>
 
@@ -337,6 +405,73 @@ export default function ChonNhanVienXemKpi({
           </div>
         ) : null}
       </section>
+
+      {/* ---- Điểm KPI tổng ---- */}
+      {!laCaNhom ? (
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center gap-2 border-b border-slate-100 px-6 py-5">
+            <span className="h-2 w-2 rounded-full bg-amber-500" />
+            <h2 className="text-lg font-semibold text-slate-900">Điểm KPI tổng</h2>
+          </div>
+
+          <div className="p-6">
+            <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3.5">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                Điểm đã đạt (các mục hệ thống đang theo dõi)
+              </p>
+              <div className="mt-1.5 flex items-center gap-2">
+                <span className="text-lg font-semibold tabular-nums text-slate-900">
+                  {(nvDiemKpi?.diemThTong ?? 0).toFixed(0)} / {(nvDiemKpi?.diemKhTong ?? 0).toFixed(0)} điểm
+                </span>
+                {(nvDiemKpi?.diemKhTong ?? 0) > 0 ? (
+                  <PhanTram value={((nvDiemKpi?.diemThTong ?? 0) / (nvDiemKpi?.diemKhTong ?? 1)) * 100} />
+                ) : null}
+              </div>
+            </div>
+
+            <p className="mt-3 text-xs leading-relaxed text-slate-400">
+              Tổng điểm chính thức của công ty là <b>1000 điểm</b>, cần đạt <b>≥850 điểm</b> và{" "}
+              <b>không có chỉ tiêu nào dưới 50%</b> mới tính đạt KPI. Số ở trên chỉ tính các mục hệ thống này đang
+              theo dõi (Doanh số Kê đơn/Phòng mạch, Doanh số Thầu, Mở mới, Duy trì) — chưa gồm Code mới, điểm Nhân sự
+              (của SS), điểm SP thị trường (của NV thử việc) hay điểm thưởng/trừ thủ công.
+            </p>
+
+            {(nvDiemKpi?.diemKhTong ?? 0) < 950 ? (
+              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800">
+                Dữ liệu chỉ tiêu tháng này trong hệ thống mới theo dõi được{" "}
+                <b>{(nvDiemKpi?.diemKhTong ?? 0).toFixed(0)}/1000 điểm</b> — chưa đủ để kết luận đạt/không đạt KPI
+                chính thức.
+              </div>
+            ) : (
+              <div
+                className={`mt-3 rounded-lg border px-3.5 py-2.5 text-sm ${
+                  (nvDiemKpi?.diemThTong ?? 0) >= 850 && (nvDiemKpi?.duoi50.length ?? 0) === 0
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : "border-rose-200 bg-rose-50 text-rose-800"
+                }`}
+              >
+                {(nvDiemKpi?.diemThTong ?? 0) >= 850 && (nvDiemKpi?.duoi50.length ?? 0) === 0
+                  ? "✅ Đạt KPI (dựa trên dữ liệu hệ thống đang theo dõi)."
+                  : "❌ Chưa đạt KPI (dựa trên dữ liệu hệ thống đang theo dõi)."}
+              </div>
+            )}
+
+            {nvDiemKpi && nvDiemKpi.duoi50.length > 0 ? (
+              <div className="mt-3">
+                <p className="text-sm font-medium text-slate-700">Chỉ tiêu đang dưới 50%:</p>
+                <ul className="mt-1.5 space-y-1">
+                  {nvDiemKpi.duoi50.map((m, i) => (
+                    <li key={i} className="flex items-center justify-between text-sm text-slate-600">
+                      <span>{m.ten}</span>
+                      <PhanTram value={m.phanTram} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

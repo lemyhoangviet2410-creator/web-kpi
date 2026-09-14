@@ -90,7 +90,7 @@ export default async function Home() {
     supabase.from("kpi_targets").select("*", { count: "exact", head: true }),
     supabase
       .from("kpi_targets")
-      .select("ma_nv, ma_to_chuc, ma_sp, chi_tieu, customers(ten_to_chuc), products(nhom_trong_tam)")
+      .select("ma_nv, ma_to_chuc, ma_sp, chi_tieu, diem_kh, customers(ten_to_chuc), products(nhom_trong_tam)")
       .eq("loai_kpi", "duy_tri")
       .eq("thang", dauThang),
     supabase
@@ -100,12 +100,12 @@ export default async function Home() {
       .lt("ngay_chung_tu", dauThangSau),
     supabase
       .from("kpi_targets")
-      .select("ma_nv, loai_kpi, chi_tieu")
+      .select("ma_nv, loai_kpi, chi_tieu, diem_kh")
       .in("loai_kpi", ["ke_don_phong_mach", "thau"])
       .eq("thang", dauThang),
     supabase
       .from("kpi_targets")
-      .select("ma_nv, chi_tieu, products(nhom_trong_tam)")
+      .select("ma_nv, chi_tieu, diem_kh, products(nhom_trong_tam)")
       .eq("loai_kpi", "mo_moi")
       .eq("thang", dauThang),
   ]);
@@ -128,25 +128,43 @@ export default async function Home() {
     tongTheoNv.set(dong.ma_nv, hienTai);
   }
 
-  // Chỉ tiêu doanh số (VNĐ) nạp từ file KPI công ty — xem skill kpi-analyst Phần 3: DS Kê đơn+
-  // Phòng mạch không giới hạn trần, DS Thầu trần 120%.
+  // Chỉ tiêu doanh số (VNĐ) + điểm KH nạp từ file KPI công ty — xem skill kpi-analyst Phần 3: DS
+  // Kê đơn+Phòng mạch không giới hạn trần, DS Thầu trần 120%.
   const chiTieuKdPmTheoNv = new Map<string, number>();
   const chiTieuThauTheoNv = new Map<string, number>();
+  const diemKhKdPmTheoNv = new Map<string, number>();
+  const diemKhThauTheoNv = new Map<string, number>();
   for (const mt of mucTieuDoanhSo ?? []) {
-    if (mt.loai_kpi === "ke_don_phong_mach") chiTieuKdPmTheoNv.set(mt.ma_nv, Number(mt.chi_tieu));
-    if (mt.loai_kpi === "thau") chiTieuThauTheoNv.set(mt.ma_nv, Number(mt.chi_tieu));
+    if (mt.loai_kpi === "ke_don_phong_mach") {
+      chiTieuKdPmTheoNv.set(mt.ma_nv, Number(mt.chi_tieu));
+      diemKhKdPmTheoNv.set(mt.ma_nv, Number(mt.diem_kh ?? 0));
+    }
+    if (mt.loai_kpi === "thau") {
+      chiTieuThauTheoNv.set(mt.ma_nv, Number(mt.chi_tieu));
+      diemKhThauTheoNv.set(mt.ma_nv, Number(mt.diem_kh ?? 0));
+    }
   }
 
   const hangMuc = (dsNhanVien ?? []).map((nv) => {
     const t = tongTheoNv.get(nv.ma_nv) ?? { thau: 0, keDonPhongMach: 0 };
     const chiTieuKdPm = chiTieuKdPmTheoNv.get(nv.ma_nv) ?? 0;
     const chiTieuThau = chiTieuThauTheoNv.get(nv.ma_nv) ?? 0;
+    const diemKhKdPm = diemKhKdPmTheoNv.get(nv.ma_nv) ?? 0;
+    const diemKhThau = diemKhThauTheoNv.get(nv.ma_nv) ?? 0;
+    const tiLeKdPm = chiTieuKdPm > 0 ? t.keDonPhongMach / chiTieuKdPm : null;
+    const tiLeThau = chiTieuThau > 0 ? t.thau / chiTieuThau : null;
     return {
       ...nv,
       ...t,
       tongCong: t.thau + t.keDonPhongMach,
-      phanTramKdPm: chiTieuKdPm > 0 ? (t.keDonPhongMach / chiTieuKdPm) * 100 : null,
-      phanTramThau: chiTieuThau > 0 ? Math.min(t.thau / chiTieuThau, 1.2) * 100 : null,
+      chiTieuKdPm,
+      chiTieuThau,
+      phanTramKdPm: tiLeKdPm !== null ? tiLeKdPm * 100 : null,
+      phanTramThau: tiLeThau !== null ? Math.min(tiLeThau, 1.2) * 100 : null,
+      diemKhKdPm,
+      diemThKdPm: tiLeKdPm !== null ? tiLeKdPm * diemKhKdPm : 0,
+      diemKhThau,
+      diemThThau: tiLeThau !== null ? Math.min(tiLeThau, 1.2) * diemKhThau : 0,
     };
   });
 
@@ -250,13 +268,20 @@ export default async function Home() {
     khachMoiTheoKhoa.set(khoa, ds);
   }
 
-  type MucTieuMoMoi = { ma_nv: string; chi_tieu: number; products: { nhom_trong_tam: string | null } | null };
+  type MucTieuMoMoi = {
+    ma_nv: string;
+    chi_tieu: number;
+    diem_kh: number | null;
+    products: { nhom_trong_tam: string | null } | null;
+  };
   const chiTieuMoMoiTheoKhoa = new Map<string, number>();
+  const diemKhMoMoiTheoKhoa = new Map<string, number>();
   for (const mt of (mucTieuMoMoi ?? []) as unknown as MucTieuMoMoi[]) {
     const nhom = mt.products?.nhom_trong_tam;
     if (!nhom) continue;
     const khoa = `${mt.ma_nv}|${nhom}`;
     chiTieuMoMoiTheoKhoa.set(khoa, (chiTieuMoMoiTheoKhoa.get(khoa) ?? 0) + Number(mt.chi_tieu));
+    diemKhMoMoiTheoKhoa.set(khoa, (diemKhMoMoiTheoKhoa.get(khoa) ?? 0) + Number(mt.diem_kh ?? 0));
   }
 
   for (const don of cacDonMoMoi) {
@@ -280,12 +305,16 @@ export default async function Home() {
         const khoa = `${nv.ma_nv}|${nhom}`;
         const soKhachDat = khachMoiTheoKhoa.get(khoa)?.size ?? 0;
         const chiTieu = chiTieuMoMoiTheoKhoa.get(khoa) ?? 0;
+        const diemKh = diemKhMoMoiTheoKhoa.get(khoa) ?? 0;
+        const tiLe = chiTieu > 0 ? soKhachDat / chiTieu : null;
         return {
           nhom,
           ...(t?.theoNhom.get(nhom) ?? { soDon: 0, doanhSo: 0 }),
           soKhachDat,
           chiTieuSoKhach: chiTieu,
-          phanTram: chiTieu > 0 ? Math.min(soKhachDat / chiTieu, 1.5) * 100 : null,
+          phanTram: tiLe !== null ? Math.min(tiLe, 1.5) * 100 : null,
+          diemKh,
+          diemTh: tiLe !== null ? Math.min(tiLe, 1.5) * diemKh : 0,
         };
       }),
     };
@@ -323,6 +352,7 @@ export default async function Home() {
     ma_to_chuc: string | null;
     ma_sp: string | null;
     chi_tieu: number;
+    diem_kh: number | null;
     customers: { ten_to_chuc: string } | null;
     products: { nhom_trong_tam: string | null } | null;
   };
@@ -347,7 +377,9 @@ export default async function Home() {
       ? soLuongTheoKhachDuyTri.get(`${mt.ma_nv}|${mt.ma_to_chuc}|${nhom}`) ?? 0
       : soLuongTheoNvNhomDuyTri.get(`${mt.ma_nv}|${nhom}`) ?? 0;
     const kh = Number(mt.chi_tieu);
-    const phanTram = kh > 0 ? Math.min(th / kh, 1) * 100 : 0;
+    const tiLe = kh > 0 ? th / kh : 0;
+    const phanTram = Math.min(tiLe, 1) * 100;
+    const diemKh = Number(mt.diem_kh ?? 0);
     return {
       maNv: mt.ma_nv,
       tenKh: mt.customers?.ten_to_chuc ?? mt.ma_to_chuc ?? "Toàn bộ khách hàng",
@@ -357,6 +389,8 @@ export default async function Home() {
       kh,
       phanTram,
       dat: phanTram >= 100,
+      diemKh,
+      diemTh: Math.min(tiLe, 1) * diemKh,
     };
   });
 
@@ -377,6 +411,86 @@ export default async function Home() {
       tyLeDat: t.tongKhachMucTieu > 0 ? (t.soKhachDat / t.tongKhachMucTieu) * 100 : 0,
     };
   });
+
+  // ---- Tổng điểm KPI (thang 1000) ----
+  // Mỗi hạng mục có "Điểm KH" (trọng số) riêng nạp từ file công ty. Điểm TH = tỉ lệ đạt (đã áp
+  // trần theo từng hạng mục) × Điểm KH. Hạng mục nào không có chỉ tiêu (diem_kh=0, "Không áp")
+  // thì KHÔNG tính vào tổng và KHÔNG xét vào rule "dưới 50%".
+  // Lưu ý quan trọng: hệ thống hiện CHƯA theo dõi Code mới, điểm Nhân sự (của SS), điểm SP thị
+  // trường (của NV thử việc) và các điểm thưởng/trừ thủ công — nên tổng điểm KH tính được ở đây
+  // có thể KHÔNG đủ 1000 với 1 số người (xem "diemKhTong" so với 1000 để biết độ đầy đủ dữ liệu).
+  type MucDuoi50 = { ten: string; phanTram: number };
+  type DiemKpi = { diemKhTong: number; diemThTong: number; duoi50: MucDuoi50[] };
+  const diemKpiTheoNv = new Map<string, DiemKpi>();
+
+  function themMuc(maNv: string, diemKh: number, diemTh: number, ten: string, phanTram: number | null) {
+    if (diemKh <= 0) return;
+    const hienTai = diemKpiTheoNv.get(maNv) ?? { diemKhTong: 0, diemThTong: 0, duoi50: [] };
+    hienTai.diemKhTong += diemKh;
+    hienTai.diemThTong += diemTh;
+    if (phanTram !== null && phanTram < 50) {
+      hienTai.duoi50.push({ ten, phanTram });
+    }
+    diemKpiTheoNv.set(maNv, hienTai);
+  }
+
+  for (const nv of hangMuc) {
+    themMuc(nv.ma_nv, nv.diemKhKdPm, nv.diemThKdPm, "Doanh số Kê đơn/Phòng mạch", nv.phanTramKdPm);
+    themMuc(nv.ma_nv, nv.diemKhThau, nv.diemThThau, "Doanh số Thầu", nv.phanTramThau);
+  }
+  for (const nv of hangMucMoMoi) {
+    for (const n of nv.theoNhom) {
+      themMuc(nv.ma_nv, n.diemKh, n.diemTh, `Mở mới ${n.nhom}`, n.phanTram);
+    }
+  }
+  for (const ct of chiTietDuyTri) {
+    themMuc(ct.maNv, ct.diemKh, ct.diemTh, `Duy trì ${ct.nhom} — ${ct.tenKh}`, ct.phanTram);
+  }
+
+  const diemKpi = (dsNhanVien ?? []).map((nv) => {
+    const d = diemKpiTheoNv.get(nv.ma_nv) ?? { diemKhTong: 0, diemThTong: 0, duoi50: [] };
+    return { ma_nv: nv.ma_nv, ten_nv: nv.ten_nv, ...d };
+  });
+
+  // ---- Tổng hợp cả nhóm (để SS/sếp xem tổng KPI toàn team) ----
+  const tongDoanhThuKdPm = hangMuc.reduce((s, x) => s + x.keDonPhongMach, 0);
+  const tongDoanhThuThau = hangMuc.reduce((s, x) => s + x.thau, 0);
+  const tongChiTieuKdPm = hangMuc.reduce((s, x) => s + x.chiTieuKdPm, 0);
+  const tongChiTieuThau = hangMuc.reduce((s, x) => s + x.chiTieuThau, 0);
+
+  const tongDoanhSoMoMoi = hangMucMoMoi.reduce((s, x) => s + x.doanhSoMoMoi, 0);
+  const tongSoDonMoMoi = hangMucMoMoi.reduce((s, x) => s + x.soDonMoMoi, 0);
+  const tongTheoNhomChung = NHOM_SAN_PHAM_TRONG_TAM.map((nhom) => {
+    const soKhachDat = hangMucMoMoi.reduce((s, x) => s + (x.theoNhom.find((n) => n.nhom === nhom)?.soKhachDat ?? 0), 0);
+    const chiTieuSoKhach = hangMucMoMoi.reduce(
+      (s, x) => s + (x.theoNhom.find((n) => n.nhom === nhom)?.chiTieuSoKhach ?? 0),
+      0
+    );
+    const tiLe = chiTieuSoKhach > 0 ? soKhachDat / chiTieuSoKhach : null;
+    return {
+      nhom,
+      soDon: hangMucMoMoi.reduce((s, x) => s + (x.theoNhom.find((n) => n.nhom === nhom)?.soDon ?? 0), 0),
+      doanhSo: hangMucMoMoi.reduce((s, x) => s + (x.theoNhom.find((n) => n.nhom === nhom)?.doanhSo ?? 0), 0),
+      soKhachDat,
+      chiTieuSoKhach,
+      phanTram: tiLe !== null ? Math.min(tiLe, 1.5) * 100 : null,
+    };
+  });
+
+  const tongKhachMucTieuChung = hangMucDuyTri.reduce((s, x) => s + x.tongKhachMucTieu, 0);
+  const tongKhachDatChung = hangMucDuyTri.reduce((s, x) => s + x.soKhachDat, 0);
+
+  const tongCaNhom = {
+    tongDoanhThuKdPm,
+    tongChiTieuKdPm,
+    tongDoanhThuThau,
+    tongChiTieuThau,
+    tongTheoNhomChung,
+    tongSoDonMoMoi,
+    tongDoanhSoMoMoi,
+    tongKhachDatChung,
+    tongKhachMucTieuChung,
+  };
 
   return (
     <main className="min-h-screen bg-slate-50 pb-16">
@@ -401,6 +515,8 @@ export default async function Home() {
           chiTietMoMoi={chiTietMoMoi}
           chiTietDuyTri={chiTietDuyTri}
           tenKhTheoMa={Object.fromEntries(tenKhTheoMa)}
+          diemKpi={diemKpi}
+          tongCaNhom={tongCaNhom}
         />
       </div>
     </main>
