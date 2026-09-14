@@ -79,8 +79,10 @@ export default async function Home() {
     { data: donHangSoLuongThangNay },
     { data: mucTieuDoanhSo },
     { data: mucTieuMoMoi },
+    { data: mucTieuCodeMoi },
+    { data: codeMoiDaDuyet },
   ] = await Promise.all([
-    supabase.from("nhan_vien").select("ma_nv, ten_nv").eq("active", true).order("ten_nv"),
+    supabase.from("nhan_vien").select("ma_nv, ten_nv, vai_tro").eq("active", true).order("ten_nv"),
     supabase
       .from("orders")
       .select("ma_nv, ma_vu_viec, tong_tien")
@@ -95,7 +97,7 @@ export default async function Home() {
       .eq("thang", dauThang),
     supabase
       .from("orders")
-      .select("ma_nv, ma_to_chuc, so_luong, products(nhom_trong_tam)")
+      .select("ma_nv, ma_to_chuc, ma_vu_viec, so_luong, products(nhom_trong_tam)")
       .gte("ngay_chung_tu", dauThang)
       .lt("ngay_chung_tu", dauThangSau),
     supabase
@@ -108,6 +110,17 @@ export default async function Home() {
       .select("ma_nv, chi_tieu, diem_kh, products(nhom_trong_tam)")
       .eq("loai_kpi", "mo_moi")
       .eq("thang", dauThang),
+    supabase
+      .from("kpi_targets")
+      .select("ma_nv, chi_tieu, diem_kh")
+      .eq("loai_kpi", "code_moi")
+      .eq("thang", dauThang),
+    supabase
+      .from("new_code_confirmations")
+      .select("ma_nv")
+      .eq("trang_thai", "da_duyet")
+      .gte("ngay_duyet", dauThang)
+      .lt("ngay_duyet", dauThangSau),
   ]);
 
   // ---- Logic tính KPI hạng mục 1: Doanh số theo kênh ----
@@ -195,8 +208,16 @@ export default async function Home() {
     return maVuViec === "TH" ? "Thầu" : "Kê đơn/Phòng mạch";
   }
 
+  // Đơn khách hàng web / đơn online (Việt yêu cầu 14/9/2026): KHÔNG tính vào Mở mới/Duy trì,
+  // chỉ tính vào doanh số theo kênh (donHang ở trên không lọc các mã này).
+  const MA_VU_VIEC_WEB_ONLINE = new Set(["WEB", "ONLINE"]);
+
   const donHopLe = donHangToanBo.filter(
-    (d) => !!d.products?.nhom_trong_tam && d.ma_to_chuc && d.ma_nv
+    (d) =>
+      !!d.products?.nhom_trong_tam &&
+      d.ma_to_chuc &&
+      d.ma_nv &&
+      !MA_VU_VIEC_WEB_ONLINE.has(d.ma_vu_viec ?? "")
   );
 
   const theoCapKhNhom = new Map<string, typeof donHopLe>();
@@ -344,6 +365,7 @@ export default async function Home() {
   type DonSoLuongDuyTri = {
     ma_nv: string | null;
     ma_to_chuc: string | null;
+    ma_vu_viec: string | null;
     so_luong: number | null;
     products: { nhom_trong_tam: string | null } | null;
   };
@@ -361,7 +383,7 @@ export default async function Home() {
   const soLuongTheoNvNhomDuyTri = new Map<string, number>();
   for (const dong of (donHangSoLuongThangNay ?? []) as unknown as DonSoLuongDuyTri[]) {
     const nhom = dong.products?.nhom_trong_tam;
-    if (!nhom || !dong.ma_nv) continue;
+    if (!nhom || !dong.ma_nv || MA_VU_VIEC_WEB_ONLINE.has(dong.ma_vu_viec ?? "")) continue;
     const soLuong = Number(dong.so_luong ?? 0);
     const khoaNvNhom = `${dong.ma_nv}|${nhom}`;
     soLuongTheoNvNhomDuyTri.set(khoaNvNhom, (soLuongTheoNvNhomDuyTri.get(khoaNvNhom) ?? 0) + soLuong);
@@ -412,85 +434,154 @@ export default async function Home() {
     };
   });
 
-  // ---- Tổng điểm KPI (thang 1000) ----
-  // Mỗi hạng mục có "Điểm KH" (trọng số) riêng nạp từ file công ty. Điểm TH = tỉ lệ đạt (đã áp
-  // trần theo từng hạng mục) × Điểm KH. Hạng mục nào không có chỉ tiêu (diem_kh=0, "Không áp")
-  // thì KHÔNG tính vào tổng và KHÔNG xét vào rule "dưới 50%".
-  // Lưu ý quan trọng: hệ thống hiện CHƯA theo dõi Code mới, điểm Nhân sự (của SS), điểm SP thị
-  // trường (của NV thử việc) và các điểm thưởng/trừ thủ công — nên tổng điểm KH tính được ở đây
-  // có thể KHÔNG đủ 1000 với 1 số người (xem "diemKhTong" so với 1000 để biết độ đầy đủ dữ liệu).
-  type MucDuoi50 = { ten: string; phanTram: number };
-  type DiemKpi = { diemKhTong: number; diemThTong: number; duoi50: MucDuoi50[] };
-  const diemKpiTheoNv = new Map<string, DiemKpi>();
-
-  function themMuc(maNv: string, diemKh: number, diemTh: number, ten: string, phanTram: number | null) {
-    if (diemKh <= 0) return;
-    const hienTai = diemKpiTheoNv.get(maNv) ?? { diemKhTong: 0, diemThTong: 0, duoi50: [] };
-    hienTai.diemKhTong += diemKh;
-    hienTai.diemThTong += diemTh;
-    if (phanTram !== null && phanTram < 50) {
-      hienTai.duoi50.push({ ten, phanTram });
-    }
-    diemKpiTheoNv.set(maNv, hienTai);
+  // ---- Code mới ----
+  // Chỉ tiêu (chi_tieu = số mã KH mới cần mở, diem_kh) nạp từ file KPI công ty — chỉ những NV có
+  // dòng loai_kpi='code_moi' mới bị áp chỉ tiêu này (đa số NV không bị áp tháng này). Thực hiện
+  // lấy từ bảng new_code_confirmations (trang_thai='da_duyet') — bảng này dùng cho quy trình xác
+  // nhận code mới, hiện chưa có ai nhập nên TH sẽ là 0 cho tới khi quy trình đó được dùng.
+  const chiTieuCodeMoiTheoNv = new Map<string, number>();
+  const diemKhCodeMoiTheoNv = new Map<string, number>();
+  for (const mt of mucTieuCodeMoi ?? []) {
+    chiTieuCodeMoiTheoNv.set(mt.ma_nv, Number(mt.chi_tieu));
+    diemKhCodeMoiTheoNv.set(mt.ma_nv, Number(mt.diem_kh ?? 0));
+  }
+  const thCodeMoiTheoNv = new Map<string, number>();
+  for (const dong of codeMoiDaDuyet ?? []) {
+    thCodeMoiTheoNv.set(dong.ma_nv, (thCodeMoiTheoNv.get(dong.ma_nv) ?? 0) + 1);
   }
 
-  for (const nv of hangMuc) {
-    themMuc(nv.ma_nv, nv.diemKhKdPm, nv.diemThKdPm, "Doanh số Kê đơn/Phòng mạch", nv.phanTramKdPm);
-    themMuc(nv.ma_nv, nv.diemKhThau, nv.diemThThau, "Doanh số Thầu", nv.phanTramThau);
-  }
-  for (const nv of hangMucMoMoi) {
-    for (const n of nv.theoNhom) {
-      themMuc(nv.ma_nv, n.diemKh, n.diemTh, `Mở mới ${n.nhom}`, n.phanTram);
-    }
-  }
-  for (const ct of chiTietDuyTri) {
-    themMuc(ct.maNv, ct.diemKh, ct.diemTh, `Duy trì ${ct.nhom} — ${ct.tenKh}`, ct.phanTram);
-  }
-
-  const diemKpi = (dsNhanVien ?? []).map((nv) => {
-    const d = diemKpiTheoNv.get(nv.ma_nv) ?? { diemKhTong: 0, diemThTong: 0, duoi50: [] };
-    return { ma_nv: nv.ma_nv, ten_nv: nv.ten_nv, ...d };
-  });
-
-  // ---- Tổng hợp cả nhóm (để SS/sếp xem tổng KPI toàn team) ----
-  const tongDoanhThuKdPm = hangMuc.reduce((s, x) => s + x.keDonPhongMach, 0);
-  const tongDoanhThuThau = hangMuc.reduce((s, x) => s + x.thau, 0);
-  const tongChiTieuKdPm = hangMuc.reduce((s, x) => s + x.chiTieuKdPm, 0);
-  const tongChiTieuThau = hangMuc.reduce((s, x) => s + x.chiTieuThau, 0);
-
-  const tongDoanhSoMoMoi = hangMucMoMoi.reduce((s, x) => s + x.doanhSoMoMoi, 0);
-  const tongSoDonMoMoi = hangMucMoMoi.reduce((s, x) => s + x.soDonMoMoi, 0);
-  const tongTheoNhomChung = NHOM_SAN_PHAM_TRONG_TAM.map((nhom) => {
-    const soKhachDat = hangMucMoMoi.reduce((s, x) => s + (x.theoNhom.find((n) => n.nhom === nhom)?.soKhachDat ?? 0), 0);
-    const chiTieuSoKhach = hangMucMoMoi.reduce(
-      (s, x) => s + (x.theoNhom.find((n) => n.nhom === nhom)?.chiTieuSoKhach ?? 0),
-      0
-    );
-    const tiLe = chiTieuSoKhach > 0 ? soKhachDat / chiTieuSoKhach : null;
+  const hangMucCodeMoi = (dsNhanVien ?? []).map((nv) => {
+    const chiTieu = chiTieuCodeMoiTheoNv.get(nv.ma_nv) ?? 0;
+    const diemKh = diemKhCodeMoiTheoNv.get(nv.ma_nv) ?? 0;
+    const th = thCodeMoiTheoNv.get(nv.ma_nv) ?? 0;
+    const tiLe = chiTieu > 0 ? th / chiTieu : null;
     return {
-      nhom,
-      soDon: hangMucMoMoi.reduce((s, x) => s + (x.theoNhom.find((n) => n.nhom === nhom)?.soDon ?? 0), 0),
-      doanhSo: hangMucMoMoi.reduce((s, x) => s + (x.theoNhom.find((n) => n.nhom === nhom)?.doanhSo ?? 0), 0),
-      soKhachDat,
-      chiTieuSoKhach,
-      phanTram: tiLe !== null ? Math.min(tiLe, 1.5) * 100 : null,
+      ...nv,
+      apDung: chiTieu > 0,
+      chiTieu,
+      th,
+      phanTram: tiLe !== null ? tiLe * 100 : null,
+      diemKh,
+      diemTh: tiLe !== null ? tiLe * diemKh : 0,
     };
   });
 
-  const tongKhachMucTieuChung = hangMucDuyTri.reduce((s, x) => s + x.tongKhachMucTieu, 0);
-  const tongKhachDatChung = hangMucDuyTri.reduce((s, x) => s + x.soKhachDat, 0);
+  // ---- Tổng điểm KPI (thang 1000, chia 6 hạng mục theo đúng cơ cấu công ty) ----
+  // 1. Doanh số Kê đơn/Phòng mạch  2. Doanh số Thầu  3. Code mới
+  // 4. Nhân sự (chỉ áp cho SS)     5. Sản phẩm trọng tâm (SPTT = Duy trì + Mở mới cộng lại)
+  // 6. SP thị trường (chỉ áp cho SS và NV thử việc)
+  // "Điểm KH" mỗi mục nạp từ file công ty. Mục nào NV không bị áp ("Không áp") thì bỏ qua, không
+  // tính vào tổng và không xét rule "dưới 50%". Mục nào NV có bị áp nhưng hệ thống CHƯA có nguồn dữ
+  // liệu để tính (Nhân sự, SP thị trường) thì đánh dấu "chưa theo dõi" — không tự suy đoán là đạt.
+  //
+  // Danh sách NV thử việc (HĐ=TV) lấy từ file chỉ tiêu tháng 9/2026 — DB chưa có cột lưu trạng thái
+  // hợp đồng nên tạm hard-code ở đây; cần cập nhật lại khi có người đổi trạng thái hoặc NV mới.
+  const MA_NV_THU_VIEC = new Set(["020044", "020143", "020336"]); // Đặng Hà Giang, Nguyễn Anh Đức, Phạm Minh Diệp
 
-  const tongCaNhom = {
-    tongDoanhThuKdPm,
-    tongChiTieuKdPm,
-    tongDoanhThuThau,
-    tongChiTieuThau,
-    tongTheoNhomChung,
-    tongSoDonMoMoi,
-    tongDoanhSoMoMoi,
-    tongKhachDatChung,
-    tongKhachMucTieuChung,
+  type MucKpi = {
+    ten: string;
+    apDung: boolean;
+    theoDoi: boolean;
+    phanTram: number | null;
+    diemKh: number;
+    diemTh: number;
   };
+  type DiemKpi = {
+    ma_nv: string;
+    ten_nv: string;
+    mucs: MucKpi[];
+    diemKhTong: number;
+    diemThTong: number;
+    duoi50: { ten: string; phanTram: number }[];
+    chuaTheoDoi: string[];
+  };
+
+  const diemKhDuyTriTheoNv = new Map<string, number>();
+  const diemThDuyTriTheoNv = new Map<string, number>();
+  for (const ct of chiTietDuyTri) {
+    diemKhDuyTriTheoNv.set(ct.maNv, (diemKhDuyTriTheoNv.get(ct.maNv) ?? 0) + ct.diemKh);
+    diemThDuyTriTheoNv.set(ct.maNv, (diemThDuyTriTheoNv.get(ct.maNv) ?? 0) + ct.diemTh);
+  }
+  const diemKhMoMoiTheoNv = new Map<string, number>();
+  const diemThMoMoiTheoNv = new Map<string, number>();
+  for (const nv of hangMucMoMoi) {
+    for (const n of nv.theoNhom) {
+      diemKhMoMoiTheoNv.set(nv.ma_nv, (diemKhMoMoiTheoNv.get(nv.ma_nv) ?? 0) + n.diemKh);
+      diemThMoMoiTheoNv.set(nv.ma_nv, (diemThMoMoiTheoNv.get(nv.ma_nv) ?? 0) + n.diemTh);
+    }
+  }
+
+  const diemKpi: DiemKpi[] = (dsNhanVien ?? []).map((nv) => {
+    const laSS = nv.vai_tro === "ss";
+    const laThuViec = MA_NV_THU_VIEC.has(nv.ma_nv);
+    const ds = hangMuc.find((x) => x.ma_nv === nv.ma_nv);
+    const cm = hangMucCodeMoi.find((x) => x.ma_nv === nv.ma_nv);
+    const diemKhSptt = (diemKhDuyTriTheoNv.get(nv.ma_nv) ?? 0) + (diemKhMoMoiTheoNv.get(nv.ma_nv) ?? 0);
+    const diemThSptt = (diemThDuyTriTheoNv.get(nv.ma_nv) ?? 0) + (diemThMoMoiTheoNv.get(nv.ma_nv) ?? 0);
+
+    const mucs: MucKpi[] = [
+      {
+        ten: "Doanh số Kê đơn/Phòng mạch",
+        apDung: (ds?.chiTieuKdPm ?? 0) > 0,
+        theoDoi: true,
+        phanTram: ds?.phanTramKdPm ?? null,
+        diemKh: ds?.diemKhKdPm ?? 0,
+        diemTh: ds?.diemThKdPm ?? 0,
+      },
+      {
+        ten: "Doanh số Thầu",
+        apDung: (ds?.chiTieuThau ?? 0) > 0,
+        theoDoi: true,
+        phanTram: ds?.phanTramThau ?? null,
+        diemKh: ds?.diemKhThau ?? 0,
+        diemTh: ds?.diemThThau ?? 0,
+      },
+      {
+        ten: "Code mới",
+        apDung: cm?.apDung ?? false,
+        theoDoi: true,
+        phanTram: cm?.phanTram ?? null,
+        diemKh: cm?.diemKh ?? 0,
+        diemTh: cm?.diemTh ?? 0,
+      },
+      {
+        ten: "Nhân sự",
+        apDung: laSS,
+        theoDoi: false,
+        phanTram: null,
+        diemKh: 0,
+        diemTh: 0,
+      },
+      {
+        ten: "Sản phẩm trọng tâm (Duy trì + Mở mới)",
+        apDung: diemKhSptt > 0,
+        theoDoi: true,
+        phanTram: diemKhSptt > 0 ? (diemThSptt / diemKhSptt) * 100 : null,
+        diemKh: diemKhSptt,
+        diemTh: diemThSptt,
+      },
+      {
+        ten: "Sản phẩm thị trường",
+        apDung: laSS || laThuViec,
+        theoDoi: false,
+        phanTram: null,
+        diemKh: 0,
+        diemTh: 0,
+      },
+    ];
+
+    const mucApDung = mucs.filter((m) => m.apDung);
+    const mucTheoDoi = mucApDung.filter((m) => m.theoDoi);
+    return {
+      ma_nv: nv.ma_nv,
+      ten_nv: nv.ten_nv,
+      mucs: mucApDung,
+      diemKhTong: mucTheoDoi.reduce((s, m) => s + m.diemKh, 0),
+      diemThTong: mucTheoDoi.reduce((s, m) => s + m.diemTh, 0),
+      duoi50: mucTheoDoi.filter((m) => m.phanTram !== null && m.phanTram < 50).map((m) => ({ ten: m.ten, phanTram: m.phanTram as number })),
+      chuaTheoDoi: mucApDung.filter((m) => !m.theoDoi).map((m) => m.ten),
+    };
+  });
 
   return (
     <main className="min-h-screen bg-slate-50 pb-16">
@@ -512,11 +603,11 @@ export default async function Home() {
           hangMuc={hangMuc}
           hangMucMoMoi={hangMucMoMoi}
           hangMucDuyTri={hangMucDuyTri}
+          hangMucCodeMoi={hangMucCodeMoi}
           chiTietMoMoi={chiTietMoMoi}
           chiTietDuyTri={chiTietDuyTri}
           tenKhTheoMa={Object.fromEntries(tenKhTheoMa)}
           diemKpi={diemKpi}
-          tongCaNhom={tongCaNhom}
         />
       </div>
     </main>
