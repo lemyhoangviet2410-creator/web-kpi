@@ -308,11 +308,6 @@ export default function ChonNhanVienXemKpi({
             </option>
           ))}
         </select>
-        {laSS ? (
-          <p className="mt-2 text-xs text-slate-400">
-            KPI của cả nhóm chính là KPI của SS — không phải tổng cộng số của từng nhân viên.
-          </p>
-        ) : null}
       </div>
 
       {/* ---- Điểm KPI tổng — đưa lên đầu để xem tổng quan trước ---- */}
