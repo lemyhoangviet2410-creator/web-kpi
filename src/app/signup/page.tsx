@@ -55,7 +55,7 @@ export default function TrangDangKy() {
 
     const { error: loiHoSo } = await supabase.from("profiles").upsert({
       id: signUpData.user!.id,
-      ma_nv: maNv,
+      ma_nv: maNv || null,
     });
     setDangXuLy(false);
     if (loiHoSo) {
@@ -79,16 +79,13 @@ export default function TrangDangKy() {
           className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
         >
           <label className="block">
-            <span className="text-sm font-medium text-slate-700">Bạn là</span>
+            <span className="text-sm font-medium text-slate-700">Bạn là (không bắt buộc)</span>
             <select
-              required
               value={maNv}
               onChange={(e) => setMaNv(e.target.value)}
               className="mt-1.5 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
             >
-              <option value="" disabled>
-                -- Chọn tên trong danh sách --
-              </option>
+              <option value="">-- Chỉ xem (sếp / khách), không cần chọn tên --</option>
               {danhSachNv.map((nv) => (
                 <option key={nv.ma_nv} value={nv.ma_nv}>
                   {nv.ten_nv} ({nv.ma_nv})
