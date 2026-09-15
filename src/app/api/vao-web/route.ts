@@ -17,10 +17,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.redirect(urlLoi, { status: 303 });
   }
 
+  // Chỉ bật cờ "secure" khi chạy https (Vercel) — cookie secure sẽ bị trình duyệt
+  // (đặc biệt Safari) từ chối lưu khi test ở http://localhost, khiến vào đúng
+  // mật khẩu vẫn bị đẩy lại màn nhập.
+  const chayHttps = request.nextUrl.protocol === "https:";
+
   const response = NextResponse.redirect(new URL("/", request.url), { status: 303 });
   response.cookies.set(TEN_COOKIE_DA_VAO, GIA_TRI_COOKIE_DA_VAO, {
     httpOnly: true,
-    secure: true,
+    secure: chayHttps,
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 24 * 180,
@@ -28,7 +33,7 @@ export async function POST(request: NextRequest) {
   if (maNv) {
     response.cookies.set(TEN_COOKIE_MA_NV, maNv, {
       httpOnly: true,
-      secure: true,
+      secure: chayHttps,
       sameSite: "lax",
       path: "/",
       maxAge: 60 * 60 * 24 * 180,
