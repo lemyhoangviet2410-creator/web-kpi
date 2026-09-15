@@ -706,12 +706,18 @@ export default async function Home() {
     tiLeTuyenMoi * CHI_TIEU_NHAN_SU_THANG_NAY.diemKhTuyenMoi + tiLeDuyTriNs * CHI_TIEU_NHAN_SU_THANG_NAY.diemKhDuyTri;
   const phanTramNhanSu = (diemThNhanSu / CHI_TIEU_NHAN_SU_THANG_NAY.diemKh) * 100;
 
-  // ---- Sản phẩm thị trường — Thực hiện tổng team (SS + NV thử việc) ----
-  // Kế hoạch của SS giữ đúng 50 điểm riêng (DIEM_KH_SS_RIENG.spThiTruong) — KHÔNG cộng dồn chỉ tiêu
-  // của 3 NV thử việc vào Kế hoạch của SS (mỗi người có bộ 1000 điểm độc lập của riêng mình). Chỉ
-  // Thực hiện của 3 NV thử việc được cộng vào để tính % cho SS, vì 50 điểm riêng của SS không có
-  // breakdown sản phẩm/khách hàng cụ thể trong file nên không tính được phần thực hiện của riêng SS.
-  const teamDiemThSpThiTruong = hangMucSpThiTruong.reduce((s, x) => s + x.diemTh, 0);
+  // ---- Sản phẩm thị trường — điểm của SS (Việt xác nhận 15/9/2026) ----
+  // Cách tính GIỐNG Sản phẩm trọng tâm: tỉ lệ = (tổng thực hiện cả nhóm / tổng chỉ tiêu cả nhóm),
+  // trần 150% (SP thị trường của team hiện toàn loại "Mở mới"), nhân với Điểm KH RIÊNG của SS (50
+  // điểm, DIEM_KH_SS_RIENG.spThiTruong — KHÔNG đổi, vì SS không có breakdown sản phẩm/khách hàng
+  // riêng cho mục này trong file). Khác với SPTT (SS có sẵn 9 dòng chỉ tiêu riêng của chính SS),
+  // SP thị trường SS không có chỉ tiêu số lượng riêng trong file — nên chỉ tiêu số lượng (mẫu số)
+  // phải lấy bằng tổng chỉ tiêu của các NV thử việc bị áp mục này (khác với cách làm ở SPTT).
+  const spThiTruongChiTieuTeam = hangMucSpThiTruong.reduce((s, x) => s + x.chiTieu, 0);
+  const spThiTruongDatTeam = hangMucSpThiTruong.reduce((s, x) => s + x.soKhachDat, 0);
+  const tiLeSpThiTruongTeam = spThiTruongChiTieuTeam > 0 ? spThiTruongDatTeam / spThiTruongChiTieuTeam : 0;
+  const teamPhanTramSpThiTruong = Math.min(tiLeSpThiTruongTeam, 1.5) * 100;
+  const teamDiemThSpThiTruong = Math.min(tiLeSpThiTruongTeam, 1.5) * DIEM_KH_SS_RIENG.spThiTruong;
 
   // ---- Tổng điểm KPI (thang 1000, chia 6 hạng mục theo đúng cơ cấu công ty) ----
   // 1. Doanh số Kê đơn/Phòng mạch  2. Doanh số Thầu  3. Code mới
@@ -819,7 +825,7 @@ export default async function Home() {
             ten: "Sản phẩm thị trường",
             apDung: true,
             theoDoi: true,
-            phanTram: (teamDiemThSpThiTruong / DIEM_KH_SS_RIENG.spThiTruong) * 100,
+            phanTram: teamPhanTramSpThiTruong,
             diemKh: DIEM_KH_SS_RIENG.spThiTruong,
             diemTh: teamDiemThSpThiTruong,
           };
