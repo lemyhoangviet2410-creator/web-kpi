@@ -5,3 +5,6 @@ export const MAT_KHAU_TRUY_CAP = "123456";
 
 export const TEN_COOKIE_DA_VAO = "web_kpi_da_vao";
 export const GIA_TRI_COOKIE_DA_VAO = "1";
+
+// Ghi nhớ ai đang xem (chọn tên khi vào web) để mặc định hiện KPI của người đó.
+export const TEN_COOKIE_MA_NV = "web_kpi_ma_nv";

@@ -1,7 +1,9 @@
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import NutDangXuat from "@/components/nut-dang-xuat";
 import ChonNhanVienXemKpi from "@/components/chon-nhan-vien-xem-kpi";
 import { NHOM_SAN_PHAM_TRONG_TAM } from "@/lib/sptt";
+import { TEN_COOKIE_MA_NV } from "@/lib/gate";
 
 function themThang(ngay: Date, soThang: number): Date {
   return new Date(Date.UTC(ngay.getUTCFullYear(), ngay.getUTCMonth() + soThang, ngay.getUTCDate()));
@@ -9,6 +11,9 @@ function themThang(ngay: Date, soThang: number): Date {
 
 export default async function Home() {
   const supabase = await createClient();
+
+  // Người vừa chọn tên ở màn vào web (không cần đăng ký/đăng nhập) — dùng để mặc định hiện KPI của họ.
+  const maNvTuCookie = (await cookies()).get(TEN_COOKIE_MA_NV)?.value;
 
   // Khoảng thời gian: tháng hiện tại (theo ngày chứng từ)
   const homNay = new Date();
@@ -608,6 +613,11 @@ export default async function Home() {
   const idxSS = (dsNhanVien ?? []).findIndex((nv) => nv.vai_tro === "ss");
   const maSS = idxSS >= 0 ? (dsNhanVien ?? [])[idxSS].ma_nv : null;
 
+  const maNvDaChon =
+    maNvTuCookie && (dsNhanVien ?? []).some((nv) => nv.ma_nv === maNvTuCookie)
+      ? maNvTuCookie
+      : null;
+
   if (maSS) {
     const idxDs = hangMuc.findIndex((x) => x.ma_nv === maSS);
     if (idxDs >= 0) {
@@ -851,7 +861,7 @@ export default async function Home() {
         <ChonNhanVienXemKpi
           soChiTieu={soChiTieu}
           dsNhanVien={dsNhanVien ?? []}
-          maNvMacDinh={maSS ?? (dsNhanVien ?? [])[0]?.ma_nv ?? ""}
+          maNvMacDinh={maNvDaChon ?? maSS ?? (dsNhanVien ?? [])[0]?.ma_nv ?? ""}
           hangMuc={hangMuc}
           hangMucMoMoi={hangMucMoMoi}
           hangMucDuyTri={hangMucDuyTri}
