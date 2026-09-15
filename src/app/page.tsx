@@ -51,6 +51,7 @@ export default async function Home() {
       ma_to_chuc: string | null;
       ngay_chung_tu: string;
       tong_tien: number;
+      so_luong: number | null;
       ma_vu_viec: string | null;
       products: { nhom_trong_tam: string | null; san_pham_thi_truong: string | null } | null;
     }[] = [];
@@ -58,7 +59,7 @@ export default async function Home() {
     while (true) {
       const { data, error } = await supabase
         .from("orders")
-        .select("id, ma_nv, ma_to_chuc, ngay_chung_tu, tong_tien, ma_vu_viec, products(nhom_trong_tam, san_pham_thi_truong)")
+        .select("id, ma_nv, ma_to_chuc, ngay_chung_tu, tong_tien, so_luong, ma_vu_viec, products(nhom_trong_tam, san_pham_thi_truong)")
         .order("ngay_chung_tu", { ascending: true })
         .order("id", { ascending: true })
         .range(trang * KICH_THUOC_TRANG, trang * KICH_THUOC_TRANG + KICH_THUOC_TRANG - 1);
@@ -240,6 +241,7 @@ export default async function Home() {
     kenh: string;
     ngay: string;
     tongTien: number;
+    soLuong: number;
   };
   const cacDonMoMoi: DonMoMoi[] = [];
 
@@ -265,6 +267,7 @@ export default async function Home() {
             kenh,
             ngay: dong.ngay_chung_tu,
             tongTien: Number(dong.tong_tien),
+            soLuong: Number(dong.so_luong ?? 0),
           });
         }
       }
@@ -558,25 +561,69 @@ export default async function Home() {
   const DIEM_KH_SS_RIENG = { codeMoi: 100, sptt: 550, spThiTruong: 50 }; // từ đúng dòng KPI riêng của SS, file tháng 9/2026 — cập nhật lại mỗi tháng
   const teamKdPmTh = hangMuc.reduce((s, x) => s + x.keDonPhongMach, 0);
   const teamThauTh = hangMuc.reduce((s, x) => s + x.thau, 0);
+  // Bảng hiển thị top-level (Mở mới/Duy trì) cho SS vẫn dùng số lượng khách/doanh số cộng dồn cả
+  // team để xem tổng quan hoạt động — KHÔNG liên quan tới cách tính điểm SPTT của riêng SS ở dưới.
   const teamTheoNhomSptt = NHOM_SAN_PHAM_TRONG_TAM.map((nhom) => {
     const soKhachDat = hangMucMoMoi.reduce((s, x) => s + (x.theoNhom.find((n) => n.nhom === nhom)?.soKhachDat ?? 0), 0);
     const chiTieuSoKhach = hangMucMoMoi.reduce(
       (s, x) => s + (x.theoNhom.find((n) => n.nhom === nhom)?.chiTieuSoKhach ?? 0),
       0
     );
-    const diemKh = hangMucMoMoi.reduce((s, x) => s + (x.theoNhom.find((n) => n.nhom === nhom)?.diemKh ?? 0), 0);
     const soDon = hangMucMoMoi.reduce((s, x) => s + (x.theoNhom.find((n) => n.nhom === nhom)?.soDon ?? 0), 0);
     const doanhSo = hangMucMoMoi.reduce((s, x) => s + (x.theoNhom.find((n) => n.nhom === nhom)?.doanhSo ?? 0), 0);
     const tiLe = chiTieuSoKhach > 0 ? soKhachDat / chiTieuSoKhach : null;
     const phanTram = tiLe !== null ? Math.min(tiLe, 1.5) * 100 : null;
-    return { nhom, soDon, doanhSo, soKhachDat, chiTieuSoKhach, phanTram, diemKh, diemTh: tiLe !== null ? Math.min(tiLe, 1.5) * diemKh : 0 };
+    // diemKh/diemTh không dùng cho SS nữa (xem chiTietDiemSpttSS) — giữ =0 chỉ để khớp kiểu dữ liệu.
+    return { nhom, soDon, doanhSo, soKhachDat, chiTieuSoKhach, phanTram, diemKh: 0, diemTh: 0 };
   });
-  const teamDiemThMoMoi = teamTheoNhomSptt.reduce((s, n) => s + n.diemTh, 0);
   const teamDuyTriDat = hangMucDuyTri.reduce((s, x) => s + x.soKhachDat, 0);
   const teamDuyTriTong = hangMucDuyTri.reduce((s, x) => s + x.tongKhachMucTieu, 0);
-  const teamDiemThDuyTri = chiTietDuyTri.reduce((s, ct) => s + ct.diemTh, 0);
-  const teamDiemThSptt = teamDiemThDuyTri + teamDiemThMoMoi;
   const teamThCodeMoi = hangMucCodeMoi.reduce((s, x) => s + x.th, 0);
+
+  // ---- Điểm SPTT của riêng SS — tính theo ĐÚNG 9 dòng chỉ tiêu riêng của SS (Việt xác nhận
+  // 15/9/2026) ----
+  // KHÔNG dùng điểm đã tính sẵn của từng TDV (khác thang điểm — mỗi TDV có bộ 1000 điểm riêng).
+  // Mỗi dòng của SS có 1 "Sản lượng KH" (chỉ tiêu SẢN LƯỢNG, không phải số khách) + 1 Điểm KH riêng
+  // — lấy từ sheet "Chi tiết SPTT T9", cộng gộp 2 dòng Kê đơn+Phòng mạch của cùng (sản phẩm, loại)
+  // lại vì đơn hàng không tách được 2 kênh này. Ví dụ minh hoạ theo đúng công thức Việt cho: mục
+  // tiêu Mở mới Fosmitic của SS là X điểm ứng với sản lượng kế hoạch Y; team thực hiện được Z sản
+  // lượng → điểm đạt = min(Z/Y, trần) × X (trần 150% cho Mở mới, 100% cho Duy trì — không vượt).
+  // CẦN CẬP NHẬT LẠI 9 dòng này mỗi tháng theo đúng file chỉ tiêu mới.
+  const SS_SPTT_LINES: { nhom: string; loai: "duy_tri" | "mo_moi"; diemKh: number; slKh: number }[] = [
+    { nhom: "Progermila", loai: "duy_tri", diemKh: 100, slKh: 4400 + 7800 },
+    { nhom: "Progermila", loai: "mo_moi", diemKh: 75, slKh: 6610 },
+    { nhom: "Tranfast", loai: "mo_moi", diemKh: 50, slKh: 150 + 500 },
+    { nhom: "Tranfast", loai: "duy_tri", diemKh: 100, slKh: 15511.2 + 4100 },
+    { nhom: "Fosmitic", loai: "duy_tri", diemKh: 100, slKh: 400 + 1760 },
+    { nhom: "Fosmitic", loai: "mo_moi", diemKh: 50, slKh: 310 },
+    { nhom: "Biosoft", loai: "duy_tri", diemKh: 25, slKh: 9900 },
+    { nhom: "Hepaphagen", loai: "duy_tri", diemKh: 25, slKh: 750 },
+    { nhom: "Kalira", loai: "duy_tri", diemKh: 25, slKh: 1800 },
+  ];
+
+  // Sản lượng Duy trì thực hiện CẢ TEAM theo từng nhóm SP (không phân biệt NV nào bán).
+  const soLuongDuyTriCaTeamTheoNhom = new Map<string, number>();
+  for (const [khoa, sl] of soLuongTheoNvNhomDuyTri) {
+    const nhom = khoa.split("|")[1];
+    soLuongDuyTriCaTeamTheoNhom.set(nhom, (soLuongDuyTriCaTeamTheoNhom.get(nhom) ?? 0) + sl);
+  }
+  // Sản lượng của các đơn Mở mới HỢP LỆ thực hiện CẢ TEAM theo từng nhóm SP tháng này.
+  const soLuongMoMoiCaTeamTheoNhom = new Map<string, number>();
+  for (const don of cacDonMoMoi) {
+    soLuongMoMoiCaTeamTheoNhom.set(don.nhom, (soLuongMoMoiCaTeamTheoNhom.get(don.nhom) ?? 0) + don.soLuong);
+  }
+
+  const chiTietDiemSpttSS = SS_SPTT_LINES.map((line) => {
+    const thTeam =
+      line.loai === "duy_tri"
+        ? soLuongDuyTriCaTeamTheoNhom.get(line.nhom) ?? 0
+        : soLuongMoMoiCaTeamTheoNhom.get(line.nhom) ?? 0;
+    const tran = line.loai === "duy_tri" ? 1 : 1.5;
+    const tiLe = line.slKh > 0 ? thTeam / line.slKh : 0;
+    const phanTram = Math.min(tiLe, tran) * 100;
+    return { ...line, thTeam, phanTram, diemTh: Math.min(tiLe, tran) * line.diemKh };
+  });
+  const teamDiemThSptt = chiTietDiemSpttSS.reduce((s, l) => s + l.diemTh, 0);
 
   const idxSS = (dsNhanVien ?? []).findIndex((nv) => nv.vai_tro === "ss");
   const maSS = idxSS >= 0 ? (dsNhanVien ?? [])[idxSS].ma_nv : null;
