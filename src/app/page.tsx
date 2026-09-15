@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import NutDangXuat from "@/components/nut-dang-xuat";
 import ChonNhanVienXemKpi from "@/components/chon-nhan-vien-xem-kpi";
@@ -10,22 +9,6 @@ function themThang(ngay: Date, soThang: number): Date {
 
 export default async function Home() {
   const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
-
-  // Tài khoản không gắn mã NV (sếp/khách chỉ xem, đăng ký không chọn tên) vẫn được vào thẳng dashboard
-  // — mặc định xem KPI của SS (đại diện cả nhóm) thay vì bị chặn lại ở màn hình chọn tên.
-  const { data: hoSo } = await supabase
-    .from("profiles")
-    .select("ma_nv")
-    .eq("id", user.id)
-    .maybeSingle();
 
   // Khoảng thời gian: tháng hiện tại (theo ngày chứng từ)
   const homNay = new Date();
@@ -868,7 +851,7 @@ export default async function Home() {
         <ChonNhanVienXemKpi
           soChiTieu={soChiTieu}
           dsNhanVien={dsNhanVien ?? []}
-          maNvMacDinh={hoSo?.ma_nv ?? maSS ?? (dsNhanVien ?? [])[0]?.ma_nv ?? ""}
+          maNvMacDinh={maSS ?? (dsNhanVien ?? [])[0]?.ma_nv ?? ""}
           hangMuc={hangMuc}
           hangMucMoMoi={hangMucMoMoi}
           hangMucDuyTri={hangMucDuyTri}

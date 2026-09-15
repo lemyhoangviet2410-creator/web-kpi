@@ -1,15 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 
 export default function NutDangXuat() {
   const router = useRouter();
 
   async function xuLy() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/login");
+    await fetch("/api/thoat", { method: "POST" });
+    router.push("/vao-web");
     router.refresh();
   }
 
