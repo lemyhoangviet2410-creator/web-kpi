@@ -544,14 +544,18 @@ export default async function Home() {
   });
 
   // ---- KPI của SS = KPI của cả nhóm ----
-  // Việt xác nhận 14/9/2026: KPI "cả nhóm" chính là dòng KPI của SS, KHÔNG PHẢI đơn hàng cá nhân
-  // của SS. Với Doanh số Kê đơn/Phòng mạch + Thầu: Kế hoạch giữ đúng số công ty giao riêng cho SS,
-  // Thực hiện = TỔNG thực hiện của TẤT CẢ nhân viên trong team (kể cả đơn hàng cá nhân của SS, nếu
-  // có) — đúng công thức skill kpi-analyst: "DS của SS = tổng Thực hiện 9 TDV + Thực hiện cá nhân
-  // của SS". Với Sản phẩm trọng tâm (Duy trì+Mở mới) và Code mới: CẢ Kế hoạch và Thực hiện đều là
-  // tổng cộng dồn chỉ tiêu/thực hiện của từng NV trong team (kể cả SS) — vì các mục này gắn với
-  // từng khách hàng/mã cụ thể do từng người phụ trách, không có 1 số "kế hoạch team" riêng do công
-  // ty đặt sẵn như 2 mục doanh số. Nhân sự & SP thị trường vẫn "chưa theo dõi" như cũ.
+  // Việt xác nhận 14-15/9/2026: KPI "cả nhóm" chính là dòng KPI của SS, KHÔNG PHẢI đơn hàng cá nhân
+  // của SS — VÀ tổng điểm KẾ HOẠCH của SS (hay cả nhóm) luôn luôn đúng 1000 điểm, không hơn, giống
+  // hệt mọi nhân viên khác (đây là 1 bộ 1000 điểm ĐỘC LẬP của riêng SS, không phải phép cộng dồn
+  // 1000 điểm của từng người trong team). Vì vậy:
+  //  - Kế hoạch (Đ.KH) mỗi hạng mục của SS LUÔN LÀ số trong đúng dòng KPI riêng của SS trong file
+  //    công ty (KHÔNG cộng dồn từ chỉ tiêu của từng NV) — xem hằng số DIEM_KH_SS_RIENG bên dưới.
+  //  - Thực hiện (TH) mỗi hạng mục của SS = TỔNG thực hiện của TẤT CẢ nhân viên trong team (kể cả
+  //    đơn hàng/hoạt động cá nhân của SS, nếu có) — đúng công thức skill kpi-analyst: "DS của SS =
+  //    tổng Thực hiện 9 TDV + Thực hiện cá nhân của SS", áp dụng tương tự cho SPTT/Code mới. Vì KH
+  //    giữ nguyên nhỏ trong khi TH cộng dồn cả team nên % có thể vượt xa 100% — đây là điều bình
+  //    thường (giống cách DS Kê đơn/Phòng mạch không giới hạn trần).
+  const DIEM_KH_SS_RIENG = { codeMoi: 100, sptt: 550, spThiTruong: 50 }; // từ đúng dòng KPI riêng của SS, file tháng 9/2026 — cập nhật lại mỗi tháng
   const teamKdPmTh = hangMuc.reduce((s, x) => s + x.keDonPhongMach, 0);
   const teamThauTh = hangMuc.reduce((s, x) => s + x.thau, 0);
   const teamTheoNhomSptt = NHOM_SAN_PHAM_TRONG_TAM.map((nhom) => {
@@ -567,16 +571,11 @@ export default async function Home() {
     const phanTram = tiLe !== null ? Math.min(tiLe, 1.5) * 100 : null;
     return { nhom, soDon, doanhSo, soKhachDat, chiTieuSoKhach, phanTram, diemKh, diemTh: tiLe !== null ? Math.min(tiLe, 1.5) * diemKh : 0 };
   });
-  const teamDiemKhMoMoi = teamTheoNhomSptt.reduce((s, n) => s + n.diemKh, 0);
   const teamDiemThMoMoi = teamTheoNhomSptt.reduce((s, n) => s + n.diemTh, 0);
   const teamDuyTriDat = hangMucDuyTri.reduce((s, x) => s + x.soKhachDat, 0);
   const teamDuyTriTong = hangMucDuyTri.reduce((s, x) => s + x.tongKhachMucTieu, 0);
-  const teamDiemKhDuyTri = chiTietDuyTri.reduce((s, ct) => s + ct.diemKh, 0);
   const teamDiemThDuyTri = chiTietDuyTri.reduce((s, ct) => s + ct.diemTh, 0);
-  const teamDiemKhSptt = teamDiemKhDuyTri + teamDiemKhMoMoi;
   const teamDiemThSptt = teamDiemThDuyTri + teamDiemThMoMoi;
-  const teamChiTieuCodeMoi = hangMucCodeMoi.reduce((s, x) => s + x.chiTieu, 0);
-  const teamDiemKhCodeMoi = hangMucCodeMoi.reduce((s, x) => s + x.diemKh, 0);
   const teamThCodeMoi = hangMucCodeMoi.reduce((s, x) => s + x.th, 0);
 
   const idxSS = (dsNhanVien ?? []).findIndex((nv) => nv.vai_tro === "ss");
@@ -622,15 +621,14 @@ export default async function Home() {
 
     const idxCodeMoi = hangMucCodeMoi.findIndex((x) => x.ma_nv === maSS);
     if (idxCodeMoi >= 0) {
-      const tiLeCodeMoi = teamChiTieuCodeMoi > 0 ? teamThCodeMoi / teamChiTieuCodeMoi : null;
+      // Chỉ tiêu (chiTieu) và Điểm KH giữ đúng dòng riêng của SS — chỉ Thực hiện cộng dồn cả team.
+      const muc = hangMucCodeMoi[idxCodeMoi];
+      const tiLeCodeMoi = muc.chiTieu > 0 ? teamThCodeMoi / muc.chiTieu : null;
       hangMucCodeMoi[idxCodeMoi] = {
-        ...hangMucCodeMoi[idxCodeMoi],
-        apDung: teamChiTieuCodeMoi > 0,
-        chiTieu: teamChiTieuCodeMoi,
+        ...muc,
         th: teamThCodeMoi,
-        diemKh: teamDiemKhCodeMoi,
         phanTram: tiLeCodeMoi !== null ? tiLeCodeMoi * 100 : null,
-        diemTh: tiLeCodeMoi !== null ? tiLeCodeMoi * teamDiemKhCodeMoi : 0,
+        diemTh: tiLeCodeMoi !== null ? tiLeCodeMoi * muc.diemKh : 0,
       };
     }
   }
@@ -661,13 +659,11 @@ export default async function Home() {
     tiLeTuyenMoi * CHI_TIEU_NHAN_SU_THANG_NAY.diemKhTuyenMoi + tiLeDuyTriNs * CHI_TIEU_NHAN_SU_THANG_NAY.diemKhDuyTri;
   const phanTramNhanSu = (diemThNhanSu / CHI_TIEU_NHAN_SU_THANG_NAY.diemKh) * 100;
 
-  // ---- Sản phẩm thị trường — tổng team (SS + NV thử việc) ----
-  // SS có 50 điểm SP thị trường riêng nhưng không có breakdown sản phẩm/khách hàng cụ thể trong
-  // file nên không tính được thực hiện cho phần đó — vẫn cộng vào mẫu số (đúng số điểm khả dụng)
-  // nhưng không đóng góp được vào tử số cho tới khi có dữ liệu chi tiết hơn.
-  const DIEM_KH_SP_THI_TRUONG_SS_RIENG = 50;
-  const teamDiemKhSpThiTruong =
-    hangMucSpThiTruong.reduce((s, x) => s + x.diemKh, 0) + DIEM_KH_SP_THI_TRUONG_SS_RIENG;
+  // ---- Sản phẩm thị trường — Thực hiện tổng team (SS + NV thử việc) ----
+  // Kế hoạch của SS giữ đúng 50 điểm riêng (DIEM_KH_SS_RIENG.spThiTruong) — KHÔNG cộng dồn chỉ tiêu
+  // của 3 NV thử việc vào Kế hoạch của SS (mỗi người có bộ 1000 điểm độc lập của riêng mình). Chỉ
+  // Thực hiện của 3 NV thử việc được cộng vào để tính % cho SS, vì 50 điểm riêng của SS không có
+  // breakdown sản phẩm/khách hàng cụ thể trong file nên không tính được phần thực hiện của riêng SS.
   const teamDiemThSpThiTruong = hangMucSpThiTruong.reduce((s, x) => s + x.diemTh, 0);
 
   // ---- Tổng điểm KPI (thang 1000, chia 6 hạng mục theo đúng cơ cấu công ty) ----
@@ -720,10 +716,10 @@ export default async function Home() {
     const laThuViec = MA_NV_THU_VIEC.has(nv.ma_nv);
     const ds = hangMuc.find((x) => x.ma_nv === nv.ma_nv);
     const cm = hangMucCodeMoi.find((x) => x.ma_nv === nv.ma_nv);
-    // SPTT của SS = tổng cộng dồn Điểm KH/TH của TOÀN team (không chỉ riêng khách hàng cá nhân SS
-    // phụ trách) — xem giải thích ở khối "KPI của SS = KPI của cả nhóm" phía trên.
+    // SPTT của SS: Điểm KH giữ đúng 550 điểm riêng của SS (không cộng dồn chỉ tiêu từng NV — xem
+    // giải thích ở khối "KPI của SS = KPI của cả nhóm" phía trên); Điểm TH = tổng cả team.
     const diemKhSptt = laSS
-      ? teamDiemKhSptt
+      ? DIEM_KH_SS_RIENG.sptt
       : (diemKhDuyTriTheoNv.get(nv.ma_nv) ?? 0) + (diemKhMoMoiTheoNv.get(nv.ma_nv) ?? 0);
     const diemThSptt = laSS
       ? teamDiemThSptt
@@ -776,8 +772,8 @@ export default async function Home() {
             ten: "Sản phẩm thị trường",
             apDung: true,
             theoDoi: true,
-            phanTram: teamDiemKhSpThiTruong > 0 ? (teamDiemThSpThiTruong / teamDiemKhSpThiTruong) * 100 : null,
-            diemKh: teamDiemKhSpThiTruong,
+            phanTram: (teamDiemThSpThiTruong / DIEM_KH_SS_RIENG.spThiTruong) * 100,
+            diemKh: DIEM_KH_SS_RIENG.spThiTruong,
             diemTh: teamDiemThSpThiTruong,
           };
         }
