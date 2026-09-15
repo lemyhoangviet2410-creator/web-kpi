@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { NHOM_SAN_PHAM_TRONG_TAM } from "@/lib/sptt";
+import NhapTuyenMoi from "@/components/nhap-tuyen-moi";
 
 function dinhDangTien(so: number) {
   return so.toLocaleString("vi-VN") + " đ";
@@ -55,6 +56,24 @@ type HangMucCodeMoi = {
   phanTram: number | null;
 };
 
+type HangMucSpThiTruong = {
+  ma_nv: string;
+  soKhachDat: number;
+  chiTieu: number;
+  diemKh: number;
+  phanTram: number;
+  diemTh: number;
+};
+
+type NhanSuInfo = {
+  thang: string;
+  tuyenMoiKh: number;
+  tuyenMoiTh: number;
+  duyTriKh: number;
+  duyTriTh: number;
+  phanTram: number;
+};
+
 type DonMoMoi = {
   maNv: string;
   maToChuc: string;
@@ -101,10 +120,12 @@ type Props = {
   hangMucMoMoi: HangMucMoMoi[];
   hangMucDuyTri: HangMucDuyTri[];
   hangMucCodeMoi: HangMucCodeMoi[];
+  hangMucSpThiTruong: HangMucSpThiTruong[];
   chiTietMoMoi: DonMoMoi[];
   chiTietDuyTri: ChiTietDuyTri[];
   tenKhTheoMa: Record<string, string>;
   diemKpi: DiemKpi[];
+  nhanSu: NhanSuInfo;
 };
 
 const thBase = "px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500";
@@ -178,10 +199,12 @@ export default function ChonNhanVienXemKpi({
   hangMucMoMoi,
   hangMucDuyTri,
   hangMucCodeMoi,
+  hangMucSpThiTruong,
   chiTietMoMoi,
   chiTietDuyTri,
   tenKhTheoMa,
   diemKpi,
+  nhanSu,
 }: Props) {
   const [maNvDangChon, setMaNvDangChon] = useState<string>(maNvMacDinh);
 
@@ -191,7 +214,9 @@ export default function ChonNhanVienXemKpi({
   const nvMoMoi = hangMucMoMoi.find((x) => x.ma_nv === maNvDangChon);
   const nvDuyTri = hangMucDuyTri.find((x) => x.ma_nv === maNvDangChon);
   const nvCodeMoi = hangMucCodeMoi.find((x) => x.ma_nv === maNvDangChon);
+  const nvSpThiTruong = hangMucSpThiTruong.find((x) => x.ma_nv === maNvDangChon);
   const nvDiemKpi = diemKpi.find((x) => x.ma_nv === maNvDangChon);
+  const spThiTruongApDung = laSS ? true : !!nvSpThiTruong;
   const donMoMoiCuaNv = chiTietMoMoi
     .filter((d) => d.maNv === maNvDangChon)
     .sort((a, b) => (a.ngay < b.ngay ? -1 : a.ngay > b.ngay ? 1 : 0));
@@ -414,6 +439,75 @@ export default function ChonNhanVienXemKpi({
             <p className="mt-3 text-xs text-slate-400">
               Số thực hiện lấy từ danh sách đã được duyệt trong hệ thống (chưa có ai duyệt thì sẽ là 0).
             </p>
+          </div>
+        </section>
+      ) : null}
+
+      {/* ---- Nhân sự (chỉ SS) ---- */}
+      {laSS ? (
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center gap-2 border-b border-slate-100 px-6 py-5">
+            <span className="h-2 w-2 rounded-full bg-rose-500" />
+            <h2 className="text-lg font-semibold text-slate-900">Nhân sự</h2>
+          </div>
+          <div className="grid grid-cols-1 gap-3 p-6 sm:grid-cols-2">
+            <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3.5">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Tuyển mới</p>
+              <p className="mt-1.5 text-lg font-semibold tabular-nums text-slate-900">
+                {nhanSu.tuyenMoiTh} / {nhanSu.tuyenMoiKh} người
+              </p>
+              <div className="mt-2">
+                <NhapTuyenMoi maNv={maNvDangChon} thang={nhanSu.thang} giaTriHienTai={nhanSu.tuyenMoiTh} />
+              </div>
+            </div>
+            <TheThongKe nhan="Duy trì nhân sự" giaTri={`${nhanSu.duyTriTh} / ${nhanSu.duyTriKh} người`} />
+          </div>
+          <div className="px-6 pb-5">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-slate-500">% Nhân sự tổng hợp:</span>
+              <PhanTram value={nhanSu.phanTram} />
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-slate-400">
+              Duy trì nhân sự tự tính = số nhân viên đang active (không tính SS). Tuyển mới cần nhập tay vì hệ thống
+              không có dữ liệu ngày tuyển. % tổng hợp = trung bình 2 tỉ lệ (công ty không tách điểm riêng cho từng
+              phần trong file chỉ tiêu).
+            </p>
+          </div>
+        </section>
+      ) : null}
+
+      {/* ---- Sản phẩm thị trường (SS + NV thử việc) ---- */}
+      {spThiTruongApDung ? (
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center gap-2 border-b border-slate-100 px-6 py-5">
+            <span className="h-2 w-2 rounded-full bg-fuchsia-500" />
+            <h2 className="text-lg font-semibold text-slate-900">Sản phẩm thị trường</h2>
+          </div>
+          <div className="p-6">
+            {laSS ? (
+              (() => {
+                const muc = nvDiemKpi?.mucs.find((m) => m.ten === "Sản phẩm thị trường");
+                return (
+                  <>
+                    <TheThongKe
+                      nhan="Điểm đã đạt (cả nhóm)"
+                      giaTri={`${(muc?.diemTh ?? 0).toFixed(0)} / ${(muc?.diemKh ?? 0).toFixed(0)} điểm`}
+                      phanTram={muc?.phanTram ?? null}
+                    />
+                    <p className="mt-3 text-xs text-slate-400">
+                      Tổng điểm khả dụng của cả nhóm bao gồm cả 50 điểm riêng của SS — phần này chưa có breakdown sản
+                      phẩm/khách hàng cụ thể trong file công ty nên chưa tính được thực hiện.
+                    </p>
+                  </>
+                );
+              })()
+            ) : (
+              <TheThongKe
+                nhan="Khách hàng mới đạt"
+                giaTri={`${nvSpThiTruong?.soKhachDat ?? 0} / ${nvSpThiTruong?.chiTieu ?? 1} khách`}
+                phanTram={nvSpThiTruong?.phanTram ?? null}
+              />
+            )}
           </div>
         </section>
       ) : null}

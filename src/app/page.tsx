@@ -52,13 +52,13 @@ export default async function Home() {
       ngay_chung_tu: string;
       tong_tien: number;
       ma_vu_viec: string | null;
-      products: { nhom_trong_tam: string | null } | null;
+      products: { nhom_trong_tam: string | null; san_pham_thi_truong: string | null } | null;
     }[] = [];
     let trang = 0;
     while (true) {
       const { data, error } = await supabase
         .from("orders")
-        .select("id, ma_nv, ma_to_chuc, ngay_chung_tu, tong_tien, ma_vu_viec, products(nhom_trong_tam)")
+        .select("id, ma_nv, ma_to_chuc, ngay_chung_tu, tong_tien, ma_vu_viec, products(nhom_trong_tam, san_pham_thi_truong)")
         .order("ngay_chung_tu", { ascending: true })
         .order("id", { ascending: true })
         .range(trang * KICH_THUOC_TRANG, trang * KICH_THUOC_TRANG + KICH_THUOC_TRANG - 1);
@@ -81,6 +81,7 @@ export default async function Home() {
     { data: mucTieuMoMoi },
     { data: mucTieuCodeMoi },
     { data: codeMoiDaDuyet },
+    { data: nhanSuThucHien },
   ] = await Promise.all([
     supabase.from("nhan_vien").select("ma_nv, ten_nv, vai_tro").eq("active", true).order("ten_nv"),
     supabase
@@ -121,6 +122,7 @@ export default async function Home() {
       .eq("trang_thai", "da_duyet")
       .gte("ngay_duyet", dauThang)
       .lt("ngay_duyet", dauThangSau),
+    supabase.from("nhan_su_thuc_hien").select("ma_nv, tuyen_moi_th").eq("thang", dauThang),
   ]);
 
   // ---- Logic tính KPI hạng mục 1: Doanh số theo kênh ----
@@ -271,6 +273,81 @@ export default async function Home() {
       ngayTruoc = ngayHienTai;
     }
   }
+
+  // ---- "Sản phẩm thị trường" (chỉ tiêu Mở mới riêng cho NV thử việc) ----
+  // Danh sách 2 sản phẩm được phép chọn (OR) cho từng NV thử việc — lấy từ sheet "Chi tiết SP Thị
+  // Trường T9" tháng 9/2026. Đây là 1 nhóm SP HOÀN TOÀN KHÁC 7 SPTT (Mucome Baby Spray, Bixazol,
+  // Liproin, Viên đặt pH.Balance — cột products.san_pham_thi_truong), mỗi NV thử việc chỉ cần mở
+  // mới 1 khách hàng ở MỘT TRONG 2 sản phẩm được giao là đạt chỉ tiêu. Danh sách này gắn với người
+  // + tháng cụ thể trong file công ty — cần cập nhật lại nếu công ty đổi sản phẩm giao hoặc có NV
+  // thử việc mới. SS (016328) cũng có 50 điểm SP thị trường riêng nhưng KHÔNG có breakdown sản
+  // phẩm/khách hàng cụ thể trong file nên không tính được thực hiện cho phần đó (xem ghi chú ở
+  // khối "KPI của SS = KPI của cả nhóm" phía dưới).
+  const NHOM_SP_THI_TRUONG_THEO_NV: Record<string, string[]> = {
+    "020143": ["Mucome Baby Spray", "Bixazol"], // Nguyễn Anh Đức
+    "020336": ["Mucome Baby Spray", "Bixazol"], // Phạm Minh Diệp
+    "020044": ["Liproin", "Viên đặt pH.Balance"], // Đặng Hà Giang
+  };
+  const DIEM_KH_SP_THI_TRUONG_MOI_NGUOI = 200; // điểm KH mỗi NV thử việc — từ file công ty
+
+  const donHopLeSpThiTruong = donHangToanBo.filter(
+    (d) =>
+      !!d.products?.san_pham_thi_truong &&
+      d.ma_to_chuc &&
+      d.ma_nv &&
+      d.ma_vu_viec !== "TH" &&
+      !MA_VU_VIEC_WEB_ONLINE.has(d.ma_vu_viec ?? "")
+  );
+  const theoCapKhNhomSpThiTruong = new Map<string, typeof donHopLeSpThiTruong>();
+  for (const dong of donHopLeSpThiTruong) {
+    const khoa = `${dong.ma_to_chuc}|${dong.products?.san_pham_thi_truong}`;
+    const ds = theoCapKhNhomSpThiTruong.get(khoa) ?? [];
+    ds.push(dong);
+    theoCapKhNhomSpThiTruong.set(khoa, ds);
+  }
+
+  const soKhachMoiSpThiTruongTheoNv = new Map<string, Set<string>>(); // ma_nv -> set ma_to_chuc đạt
+
+  for (const ds of theoCapKhNhomSpThiTruong.values()) {
+    const nvDaBan = new Set<string>();
+    let ngayTruoc: Date | null = null;
+
+    for (const dong of ds) {
+      const maNv = dong.ma_nv as string;
+      const nhom = dong.products?.san_pham_thi_truong as string;
+      const ngayHienTai = new Date(dong.ngay_chung_tu + "T00:00:00Z");
+      const laLanDauTuyetDoi = ngayTruoc === null;
+      const duKhoangNghi = ngayTruoc !== null && ngayHienTai.getTime() > themThang(ngayTruoc, 4).getTime();
+      const nvChuaTungBan = !nvDaBan.has(maNv);
+
+      if ((laLanDauTuyetDoi || duKhoangNghi) && nvChuaTungBan) {
+        if (dong.ngay_chung_tu >= dauThang && dong.ngay_chung_tu < dauThangSau) {
+          const nhomChoPhep = NHOM_SP_THI_TRUONG_THEO_NV[maNv];
+          if (nhomChoPhep?.includes(nhom)) {
+            const ds2 = soKhachMoiSpThiTruongTheoNv.get(maNv) ?? new Set<string>();
+            ds2.add(dong.ma_to_chuc as string);
+            soKhachMoiSpThiTruongTheoNv.set(maNv, ds2);
+          }
+        }
+      }
+
+      nvDaBan.add(maNv);
+      ngayTruoc = ngayHienTai;
+    }
+  }
+
+  const hangMucSpThiTruong = Object.keys(NHOM_SP_THI_TRUONG_THEO_NV).map((maNv) => {
+    const soKhachDat = soKhachMoiSpThiTruongTheoNv.get(maNv)?.size ?? 0;
+    const tiLe = Math.min(soKhachDat / 1, 1.5); // chỉ tiêu luôn là 1 khách mới/người
+    return {
+      ma_nv: maNv,
+      soKhachDat,
+      chiTieu: 1,
+      diemKh: DIEM_KH_SP_THI_TRUONG_MOI_NGUOI,
+      phanTram: tiLe * 100,
+      diemTh: tiLe * DIEM_KH_SP_THI_TRUONG_MOI_NGUOI,
+    };
+  });
 
   type ThongKe = { soDon: number; doanhSo: number };
   const tongMoMoiTheoNv = new Map<
@@ -558,6 +635,33 @@ export default async function Home() {
     }
   }
 
+  // ---- Nhân sự (chỉ tiêu riêng của SS) ----
+  // Chỉ tiêu tháng 9/2026 lấy từ cột "TD mới SL KH" / "DT NS KH" / "Đ.KH tổng" sheet "KH KPIs
+  // tháng 9": Tuyển mới KH=1 người, Duy trì nhân sự KH=9 người, tổng 100 điểm cho cả 2 phần gộp lại
+  // (công ty không tách điểm riêng cho từng phần) — CẦN CẬP NHẬT LẠI 3 số này mỗi tháng theo đúng
+  // file chỉ tiêu mới. % Nhân sự = trung bình cộng tỉ lệ 2 phần (mỗi bên trần 100%) do thiếu công
+  // thức chia điểm chính thức của công ty cho 2 phần này — chỉ là cách tính tạm, có thể cần sửa lại
+  // nếu công ty xác nhận công thức khác.
+  // Duy trì nhân sự TH = số NV đang active KHÔNG TÍNH SS (Việt xác nhận 15/9/2026: nhóm hiện có 8
+  // bạn NV). Tuyển mới TH nhập tay qua bảng nhan_su_thuc_hien (hệ thống không có dữ liệu ngày
+  // tuyển nên không tự tính được).
+  const CHI_TIEU_NHAN_SU_THANG_NAY = { tuyenMoiKh: 1, duyTriKh: 9, diemKh: 100 };
+  const tuyenMoiTh = maSS ? Number((nhanSuThucHien ?? []).find((r) => r.ma_nv === maSS)?.tuyen_moi_th ?? 0) : 0;
+  const duyTriNsTh = (dsNhanVien ?? []).filter((nv) => nv.vai_tro !== "ss").length;
+  const tiLeTuyenMoi = Math.min(tuyenMoiTh / CHI_TIEU_NHAN_SU_THANG_NAY.tuyenMoiKh, 1);
+  const tiLeDuyTriNs = Math.min(duyTriNsTh / CHI_TIEU_NHAN_SU_THANG_NAY.duyTriKh, 1);
+  const phanTramNhanSu = ((tiLeTuyenMoi + tiLeDuyTriNs) / 2) * 100;
+  const diemThNhanSu = (phanTramNhanSu / 100) * CHI_TIEU_NHAN_SU_THANG_NAY.diemKh;
+
+  // ---- Sản phẩm thị trường — tổng team (SS + NV thử việc) ----
+  // SS có 50 điểm SP thị trường riêng nhưng không có breakdown sản phẩm/khách hàng cụ thể trong
+  // file nên không tính được thực hiện cho phần đó — vẫn cộng vào mẫu số (đúng số điểm khả dụng)
+  // nhưng không đóng góp được vào tử số cho tới khi có dữ liệu chi tiết hơn.
+  const DIEM_KH_SP_THI_TRUONG_SS_RIENG = 50;
+  const teamDiemKhSpThiTruong =
+    hangMucSpThiTruong.reduce((s, x) => s + x.diemKh, 0) + DIEM_KH_SP_THI_TRUONG_SS_RIENG;
+  const teamDiemThSpThiTruong = hangMucSpThiTruong.reduce((s, x) => s + x.diemTh, 0);
+
   // ---- Tổng điểm KPI (thang 1000, chia 6 hạng mục theo đúng cơ cấu công ty) ----
   // 1. Doanh số Kê đơn/Phòng mạch  2. Doanh số Thầu  3. Code mới
   // 4. Nhân sự (chỉ áp cho SS)     5. Sản phẩm trọng tâm (SPTT = Duy trì + Mở mới cộng lại)
@@ -645,10 +749,10 @@ export default async function Home() {
       {
         ten: "Nhân sự",
         apDung: laSS,
-        theoDoi: false,
-        phanTram: null,
-        diemKh: 0,
-        diemTh: 0,
+        theoDoi: true,
+        phanTram: laSS ? phanTramNhanSu : null,
+        diemKh: laSS ? CHI_TIEU_NHAN_SU_THANG_NAY.diemKh : 0,
+        diemTh: laSS ? diemThNhanSu : 0,
       },
       {
         ten: "Sản phẩm trọng tâm (Duy trì + Mở mới)",
@@ -658,14 +762,27 @@ export default async function Home() {
         diemKh: diemKhSptt,
         diemTh: diemThSptt,
       },
-      {
-        ten: "Sản phẩm thị trường",
-        apDung: laSS || laThuViec,
-        theoDoi: false,
-        phanTram: null,
-        diemKh: 0,
-        diemTh: 0,
-      },
+      (() => {
+        if (laSS) {
+          return {
+            ten: "Sản phẩm thị trường",
+            apDung: true,
+            theoDoi: true,
+            phanTram: teamDiemKhSpThiTruong > 0 ? (teamDiemThSpThiTruong / teamDiemKhSpThiTruong) * 100 : null,
+            diemKh: teamDiemKhSpThiTruong,
+            diemTh: teamDiemThSpThiTruong,
+          };
+        }
+        const sptt = hangMucSpThiTruong.find((x) => x.ma_nv === nv.ma_nv);
+        return {
+          ten: "Sản phẩm thị trường",
+          apDung: laThuViec,
+          theoDoi: true,
+          phanTram: sptt?.phanTram ?? null,
+          diemKh: sptt?.diemKh ?? 0,
+          diemTh: sptt?.diemTh ?? 0,
+        };
+      })(),
     ];
 
     const mucApDung = mucs.filter((m) => m.apDung);
@@ -702,10 +819,19 @@ export default async function Home() {
           hangMucMoMoi={hangMucMoMoi}
           hangMucDuyTri={hangMucDuyTri}
           hangMucCodeMoi={hangMucCodeMoi}
+          hangMucSpThiTruong={hangMucSpThiTruong}
           chiTietMoMoi={chiTietMoMoi}
           chiTietDuyTri={chiTietDuyTri}
           tenKhTheoMa={Object.fromEntries(tenKhTheoMa)}
           diemKpi={diemKpi}
+          nhanSu={{
+            thang: dauThang,
+            tuyenMoiKh: CHI_TIEU_NHAN_SU_THANG_NAY.tuyenMoiKh,
+            tuyenMoiTh,
+            duyTriKh: CHI_TIEU_NHAN_SU_THANG_NAY.duyTriKh,
+            duyTriTh: duyTriNsTh,
+            phanTram: phanTramNhanSu,
+          }}
         />
       </div>
     </main>
