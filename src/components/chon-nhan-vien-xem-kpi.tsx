@@ -469,8 +469,8 @@ export default function ChonNhanVienXemKpi({
             </div>
             <p className="mt-2 text-xs leading-relaxed text-slate-400">
               Duy trì nhân sự tự tính = số nhân viên đang active (không tính SS). Tuyển mới cần nhập tay vì hệ thống
-              không có dữ liệu ngày tuyển. % tổng hợp = trung bình 2 tỉ lệ (công ty không tách điểm riêng cho từng
-              phần trong file chỉ tiêu).
+              không có dữ liệu ngày tuyển. Điểm Nhân sự = Tuyển mới (30% · 30 điểm) + Duy trì (70% · 70 điểm), mỗi
+              phần trần 100%.
             </p>
           </div>
         </section>

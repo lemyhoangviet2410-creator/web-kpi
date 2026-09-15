@@ -637,21 +637,29 @@ export default async function Home() {
 
   // ---- Nhân sự (chỉ tiêu riêng của SS) ----
   // Chỉ tiêu tháng 9/2026 lấy từ cột "TD mới SL KH" / "DT NS KH" / "Đ.KH tổng" sheet "KH KPIs
-  // tháng 9": Tuyển mới KH=1 người, Duy trì nhân sự KH=9 người, tổng 100 điểm cho cả 2 phần gộp lại
-  // (công ty không tách điểm riêng cho từng phần) — CẦN CẬP NHẬT LẠI 3 số này mỗi tháng theo đúng
-  // file chỉ tiêu mới. % Nhân sự = trung bình cộng tỉ lệ 2 phần (mỗi bên trần 100%) do thiếu công
-  // thức chia điểm chính thức của công ty cho 2 phần này — chỉ là cách tính tạm, có thể cần sửa lại
-  // nếu công ty xác nhận công thức khác.
+  // tháng 9": Tuyển mới KH=1 người, Duy trì nhân sự KH=9 người, tổng 100 điểm — Việt xác nhận
+  // 15/9/2026: Tuyển mới chiếm 30% (30 điểm), Duy trì chiếm 70% (70 điểm) trong 100 điểm kế hoạch.
+  // CẦN CẬP NHẬT LẠI các số này mỗi tháng theo đúng file chỉ tiêu mới (tỉ lệ 30/70 giữ nguyên trừ
+  // khi công ty đổi).
   // Duy trì nhân sự TH = số NV đang active KHÔNG TÍNH SS (Việt xác nhận 15/9/2026: nhóm hiện có 8
   // bạn NV). Tuyển mới TH nhập tay qua bảng nhan_su_thuc_hien (hệ thống không có dữ liệu ngày
   // tuyển nên không tự tính được).
-  const CHI_TIEU_NHAN_SU_THANG_NAY = { tuyenMoiKh: 1, duyTriKh: 9, diemKh: 100 };
+  const CHI_TIEU_NHAN_SU_THANG_NAY = {
+    tuyenMoiKh: 1,
+    duyTriKh: 9,
+    diemKhTuyenMoi: 30,
+    diemKhDuyTri: 70,
+    get diemKh() {
+      return this.diemKhTuyenMoi + this.diemKhDuyTri;
+    },
+  };
   const tuyenMoiTh = maSS ? Number((nhanSuThucHien ?? []).find((r) => r.ma_nv === maSS)?.tuyen_moi_th ?? 0) : 0;
   const duyTriNsTh = (dsNhanVien ?? []).filter((nv) => nv.vai_tro !== "ss").length;
   const tiLeTuyenMoi = Math.min(tuyenMoiTh / CHI_TIEU_NHAN_SU_THANG_NAY.tuyenMoiKh, 1);
   const tiLeDuyTriNs = Math.min(duyTriNsTh / CHI_TIEU_NHAN_SU_THANG_NAY.duyTriKh, 1);
-  const phanTramNhanSu = ((tiLeTuyenMoi + tiLeDuyTriNs) / 2) * 100;
-  const diemThNhanSu = (phanTramNhanSu / 100) * CHI_TIEU_NHAN_SU_THANG_NAY.diemKh;
+  const diemThNhanSu =
+    tiLeTuyenMoi * CHI_TIEU_NHAN_SU_THANG_NAY.diemKhTuyenMoi + tiLeDuyTriNs * CHI_TIEU_NHAN_SU_THANG_NAY.diemKhDuyTri;
+  const phanTramNhanSu = (diemThNhanSu / CHI_TIEU_NHAN_SU_THANG_NAY.diemKh) * 100;
 
   // ---- Sản phẩm thị trường — tổng team (SS + NV thử việc) ----
   // SS có 50 điểm SP thị trường riêng nhưng không có breakdown sản phẩm/khách hàng cụ thể trong
