@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import NutDangXuat from "@/components/nut-dang-xuat";
 import ChonNhanVienXemKpi from "@/components/chon-nhan-vien-xem-kpi";
@@ -853,7 +854,15 @@ export default async function Home() {
             <p className="text-sm font-medium text-indigo-600">Web quản lý KPI</p>
             <h1 className="text-xl font-semibold text-slate-900">Team — tháng {tenThang}</h1>
           </div>
-          <NutDangXuat />
+          <div className="flex items-center gap-3">
+            <Link
+              href="/xac-nhan-code-moi"
+              className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              Xác nhận Code mới
+            </Link>
+            <NutDangXuat />
+          </div>
         </div>
       </div>
 
