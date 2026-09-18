@@ -18,6 +18,15 @@ export async function POST(request: NextRequest) {
   const nguoiDuyet = (await cookies()).get(TEN_COOKIE_MA_NV)?.value || null;
   const supabase = await createClient();
 
+  const { data: nvSS } = await supabase
+    .from("nhan_vien")
+    .select("ma_nv")
+    .eq("vai_tro", "ss")
+    .maybeSingle();
+  if (!nvSS || nguoiDuyet !== nvSS.ma_nv) {
+    return NextResponse.redirect(new URL("/xac-nhan-code-moi?loi=1", request.url), { status: 303 });
+  }
+
   const { data: dongDaCo } = await supabase
     .from("new_code_confirmations")
     .select("id")
