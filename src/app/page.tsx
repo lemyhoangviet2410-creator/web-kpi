@@ -854,7 +854,19 @@ export default async function Home() {
             <p className="text-sm font-medium text-indigo-600">Web quản lý KPI</p>
             <h1 className="text-xl font-semibold text-slate-900">Team — tháng {tenThang}</h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <Link
+              href="/tien-do-thau"
+              className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              Tiến độ thầu
+            </Link>
+            <Link
+              href="/call-cung-tuyen"
+              className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              Call - Cung tuyến
+            </Link>
             <Link
               href="/xac-nhan-code-moi"
               className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
