@@ -868,6 +868,12 @@ export default async function Home() {
               Call - Cung tuyến
             </Link>
             <Link
+              href="/thong-tin-khach-hang"
+              className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              Thông tin khách hàng
+            </Link>
+            <Link
               href="/xac-nhan-code-moi"
               className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
             >
