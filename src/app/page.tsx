@@ -11,21 +11,37 @@ function themThang(ngay: Date, soThang: number): Date {
   return new Date(Date.UTC(ngay.getUTCFullYear(), ngay.getUTCMonth() + soThang, ngay.getUTCDate()));
 }
 
-export default async function Home() {
+type CauHinhThang = {
+  diem_kh_ss_rieng: { codeMoi: number; sptt: number; spThiTruong: number };
+  ss_sptt_lines: { nhom: string; loai: "duy_tri" | "mo_moi"; diemKh: number; slKh: number }[];
+  chi_tieu_nhan_su: { tuyenMoiKh: number; duyTriKh: number; diemKhTuyenMoi: number; diemKhDuyTri: number };
+  sp_thi_truong: Record<string, { nhom: string[]; diemKh: number }>;
+};
+
+const CAU_HINH_RONG: CauHinhThang = {
+  diem_kh_ss_rieng: { codeMoi: 0, sptt: 0, spThiTruong: 0 },
+  ss_sptt_lines: [],
+  chi_tieu_nhan_su: { tuyenMoiKh: 1, duyTriKh: 1, diemKhTuyenMoi: 30, diemKhDuyTri: 70 },
+  sp_thi_truong: {},
+};
+
+export default async function Home({ searchParams }: { searchParams: Promise<{ thang?: string }> }) {
   const supabase = await createClient();
+  const { thang: thangTuUrl } = await searchParams;
 
   // Người vừa chọn tên ở màn vào web (không cần đăng ký/đăng nhập) — dùng để mặc định hiện KPI của họ.
   const maNvTuCookie = (await cookies()).get(TEN_COOKIE_MA_NV)?.value;
 
-  // Khoảng thời gian: tháng hiện tại (theo ngày chứng từ)
+  // Khoảng thời gian: tháng được chọn trên web (?thang=YYYY-MM), mặc định là tháng hiện tại
+  // (theo ngày chứng từ). Cho phép xem lại các tháng trước đã có chỉ tiêu trong hệ thống.
   const homNay = new Date();
-  const dauThang = new Date(Date.UTC(homNay.getFullYear(), homNay.getMonth(), 1))
-    .toISOString()
-    .slice(0, 10);
-  const dauThangSau = new Date(Date.UTC(homNay.getFullYear(), homNay.getMonth() + 1, 1))
-    .toISOString()
-    .slice(0, 10);
-  const tenThang = `${homNay.getMonth() + 1}/${homNay.getFullYear()}`;
+  const thangHienTai = `${homNay.getFullYear()}-${String(homNay.getMonth() + 1).padStart(2, "0")}`;
+  const thangDuocChon = /^\d{4}-(0[1-9]|1[0-2])$/.test(thangTuUrl ?? "") ? (thangTuUrl as string) : thangHienTai;
+  const [namChon, thangChonSo] = thangDuocChon.split("-").map(Number);
+  const dauThang = `${thangDuocChon}-01`;
+  const dauThangSau = new Date(Date.UTC(namChon, thangChonSo, 1)).toISOString().slice(0, 10);
+  const tenThang = `${thangChonSo}/${namChon}`;
+  const laThangHienTai = thangDuocChon === thangHienTai;
 
   // Lấy TOÀN BỘ lịch sử đơn hàng của các sản phẩm trọng tâm (không giới hạn theo tháng) để tính
   // hạng mục "Mở mới" — cần biết đúng ngày mua gần nhất trước đó và NV nào đã từng bán cho đúng
@@ -58,8 +74,34 @@ export default async function Home() {
     return ketQua;
   }
 
+  // Danh sách nhân viên của tháng đang xem: SS + những người có chỉ tiêu trong tháng đó (để tháng
+  // cũ vẫn hiện đủ cả người đã nghỉ sau này). Tháng chưa có chỉ tiêu nào thì lấy NV đang active.
+  const [{ data: tatCaNhanVien }, { data: nvCoChiTieuThang }, { data: dsCauHinhThang }] = await Promise.all([
+    supabase.from("nhan_vien").select("ma_nv, ten_nv, vai_tro, active").order("ten_nv"),
+    supabase.from("kpi_targets").select("ma_nv").eq("loai_kpi", "ke_don_phong_mach").eq("thang", dauThang),
+    supabase.from("kpi_cau_hinh_thang").select("thang, cau_hinh").order("thang", { ascending: false }),
+  ]);
+  const tapNvCoChiTieu = new Set((nvCoChiTieuThang ?? []).map((r) => r.ma_nv as string));
+  const dsNhanVien = (tatCaNhanVien ?? [])
+    .filter((nv) =>
+      nv.vai_tro === "ss" ||
+      (tapNvCoChiTieu.size > 0 ? tapNvCoChiTieu.has(nv.ma_nv) : nv.active)
+    )
+    .map(({ ma_nv, ten_nv, vai_tro }) => ({ ma_nv, ten_nv, vai_tro }));
+
+  // Cấu hình riêng của từng tháng (điểm KH của SS, 9 dòng SPTT của SS, chỉ tiêu nhân sự, SP thị
+  // trường) — lưu ở bảng kpi_cau_hinh_thang. Tháng chưa có cấu hình thì tạm dùng của tháng gần
+  // nhất trước đó và báo rõ trên màn hình.
+  const hangCauHinhThang = (dsCauHinhThang ?? []) as { thang: string; cau_hinh: CauHinhThang }[];
+  const cauHinhDungThang = hangCauHinhThang.find((h) => h.thang === dauThang);
+  const cauHinhDuPhong = hangCauHinhThang.find((h) => h.thang < dauThang);
+  const cauHinh: CauHinhThang = (cauHinhDungThang ?? cauHinhDuPhong)?.cau_hinh ?? CAU_HINH_RONG;
+  const thieuCauHinhThang = !cauHinhDungThang;
+  const cacThangXem = Array.from(
+    new Set([...hangCauHinhThang.map((h) => h.thang.slice(0, 7)), thangHienTai, thangDuocChon])
+  ).sort((a, b) => (a < b ? 1 : -1));
+
   const [
-    { data: dsNhanVien },
     { data: donHang },
     donHangToanBo,
     { count: soChiTieu },
@@ -71,7 +113,6 @@ export default async function Home() {
     { data: codeMoiDaDuyet },
     { data: nhanSuThucHien },
   ] = await Promise.all([
-    supabase.from("nhan_vien").select("ma_nv, ten_nv, vai_tro").eq("active", true).order("ten_nv"),
     supabase
       .from("orders")
       .select("ma_nv, ma_vu_viec, tong_tien, products(khong_tinh_doanh_so)")
@@ -267,18 +308,21 @@ export default async function Home() {
 
   // ---- "Sản phẩm thị trường" (chỉ tiêu Mở mới riêng cho NV thử việc) ----
   // Danh sách 2 sản phẩm được phép chọn (OR) cho từng NV thử việc — lấy từ sheet "Chi tiết SP Thị
-  // Trường T10" tháng 10/2026. Đây là 1 nhóm SP HOÀN TOÀN KHÁC 7 SPTT (Mucome Baby Spray, Bixazol,
+  // Trường T<tháng>" của file KPI từng tháng. Đây là 1 nhóm SP HOÀN TOÀN KHÁC 7 SPTT (Mucome Baby Spray, Bixazol,
   // Liproin, Viên đặt pH.Balance — cột products.san_pham_thi_truong), mỗi NV thử việc chỉ cần mở
   // mới 1 khách hàng ở MỘT TRONG 2 sản phẩm được giao là đạt chỉ tiêu. Danh sách này gắn với người
   // + tháng cụ thể trong file công ty — cần cập nhật lại nếu công ty đổi sản phẩm giao hoặc có NV
   // thử việc mới. SS (016328) cũng có 50 điểm SP thị trường riêng nhưng KHÔNG có breakdown sản
   // phẩm/khách hàng cụ thể trong file nên không tính được thực hiện cho phần đó (xem ghi chú ở
   // khối "KPI của SS = KPI của cả nhóm" phía dưới).
-  const NHOM_SP_THI_TRUONG_THEO_NV: Record<string, string[]> = {
-    "020336": ["Mucome Baby Spray", "Bixazol"], // Phạm Minh Diệp
-  };
-  // Điểm KH SP thị trường của từng NV — từ file công ty (tháng 10/2026 chỉ còn Diệp, 300 điểm).
-  const DIEM_KH_SP_THI_TRUONG_THEO_NV: Record<string, number> = { "020336": 300 };
+  // Nay lấy từ bảng kpi_cau_hinh_thang (theo tháng) thay vì hard-code.
+  const NHOM_SP_THI_TRUONG_THEO_NV: Record<string, string[]> = Object.fromEntries(
+    Object.entries(cauHinh.sp_thi_truong).map(([maNv, v]) => [maNv, v.nhom])
+  );
+  // Điểm KH SP thị trường của từng NV — từ file công ty.
+  const DIEM_KH_SP_THI_TRUONG_THEO_NV: Record<string, number> = Object.fromEntries(
+    Object.entries(cauHinh.sp_thi_truong).map(([maNv, v]) => [maNv, v.diemKh])
+  );
 
   const donHopLeSpThiTruong = donHangToanBo.filter(
     (d) =>
@@ -545,7 +589,7 @@ export default async function Home() {
   //    tổng Thực hiện 9 TDV + Thực hiện cá nhân của SS", áp dụng tương tự cho SPTT/Code mới. Vì KH
   //    giữ nguyên nhỏ trong khi TH cộng dồn cả team nên % có thể vượt xa 100% — đây là điều bình
   //    thường (giống cách DS Kê đơn/Phòng mạch không giới hạn trần).
-  const DIEM_KH_SS_RIENG = { codeMoi: 100, sptt: 550, spThiTruong: 50 }; // từ đúng dòng KPI riêng của SS, file tháng 10/2026 — cập nhật lại mỗi tháng
+  const DIEM_KH_SS_RIENG = cauHinh.diem_kh_ss_rieng; // từ đúng dòng KPI riêng của SS trong file công ty, lưu theo tháng ở kpi_cau_hinh_thang
   const teamKdPmTh = hangMuc.reduce((s, x) => s + x.keDonPhongMach, 0);
   const teamThauTh = hangMuc.reduce((s, x) => s + x.thau, 0);
   // Bảng hiển thị top-level (Mở mới/Duy trì) cho SS vẫn dùng số lượng khách/doanh số cộng dồn cả
@@ -575,18 +619,8 @@ export default async function Home() {
   // lại vì đơn hàng không tách được 2 kênh này. Ví dụ minh hoạ theo đúng công thức Việt cho: mục
   // tiêu Mở mới Fosmitic của SS là X điểm ứng với sản lượng kế hoạch Y; team thực hiện được Z sản
   // lượng → điểm đạt = min(Z/Y, trần) × X (trần 150% cho Mở mới, 100% cho Duy trì — không vượt).
-  // CẦN CẬP NHẬT LẠI 9 dòng này mỗi tháng theo đúng file chỉ tiêu mới.
-  const SS_SPTT_LINES: { nhom: string; loai: "duy_tri" | "mo_moi"; diemKh: number; slKh: number }[] = [
-    { nhom: "Progermila", loai: "duy_tri", diemKh: 100, slKh: 9300 + 8000 },
-    { nhom: "Progermila", loai: "mo_moi", diemKh: 75, slKh: 6410 },
-    { nhom: "Tranfast", loai: "mo_moi", diemKh: 50, slKh: 150 + 400 },
-    { nhom: "Tranfast", loai: "duy_tri", diemKh: 100, slKh: 15540 + 4000 },
-    { nhom: "Fosmitic", loai: "duy_tri", diemKh: 100, slKh: 400 + 1870 },
-    { nhom: "Fosmitic", loai: "mo_moi", diemKh: 50, slKh: 510 },
-    { nhom: "Biosoft", loai: "duy_tri", diemKh: 25, slKh: 35640 },
-    { nhom: "Hepaphagen", loai: "duy_tri", diemKh: 25, slKh: 800 },
-    { nhom: "Kalira", loai: "duy_tri", diemKh: 25, slKh: 1600 },
-  ];
+  // 9 dòng này lưu theo từng tháng trong bảng kpi_cau_hinh_thang — mỗi tháng nhập dòng mới theo file chỉ tiêu.
+  const SS_SPTT_LINES = cauHinh.ss_sptt_lines; // lưu theo tháng ở kpi_cau_hinh_thang
 
   // Sản lượng Duy trì thực hiện CẢ TEAM theo từng nhóm SP (không phân biệt NV nào bán).
   const soLuongDuyTriCaTeamTheoNhom = new Map<string, number>();
@@ -673,20 +707,17 @@ export default async function Home() {
   }
 
   // ---- Nhân sự (chỉ tiêu riêng của SS) ----
-  // Chỉ tiêu tháng 10/2026 lấy từ cột "TD mới SL KH" / "DT NS KH" / "Đ.KH tổng" sheet "KH KPIs
-  // tháng 10": Tuyển mới KH=2 người, Duy trì nhân sự KH=8 người, tổng 100 điểm — Việt xác nhận
+  // Chỉ tiêu lấy từ cột "TD mới SL KH" / "DT NS KH" / "Đ.KH tổng" sheet "KH KPIs tháng N" của file
+  // công ty (tháng 9: Tuyển mới 1 / Duy trì 9; tháng 10: Tuyển mới 2 / Duy trì 8), tổng 100 điểm — Việt xác nhận
   // 15/9/2026: Tuyển mới chiếm 30% (30 điểm), Duy trì chiếm 70% (70 điểm) trong 100 điểm kế hoạch.
-  // CẦN CẬP NHẬT LẠI các số này mỗi tháng theo đúng file chỉ tiêu mới (tỉ lệ 30/70 giữ nguyên trừ
+  // Các số này lưu theo tháng trong kpi_cau_hinh_thang (tỉ lệ 30/70 giữ nguyên trừ
   // khi công ty đổi).
   // Duy trì nhân sự TH = số NV đang active KHÔNG TÍNH SS (Việt xác nhận 15/9/2026: nhóm hiện có 8
   // bạn NV). Tuyển mới TH nhập tay qua bảng nhan_su_thuc_hien (hệ thống không có dữ liệu ngày
   // tuyển nên không tự tính được).
   const CHI_TIEU_NHAN_SU_THANG_NAY = {
-    tuyenMoiKh: 2,
-    duyTriKh: 8,
-    diemKhTuyenMoi: 30,
-    diemKhDuyTri: 70,
-    get diemKh() {
+    ...cauHinh.chi_tieu_nhan_su,
+    get diemKh(): number {
       return this.diemKhTuyenMoi + this.diemKhDuyTri;
     },
   };
@@ -888,6 +919,38 @@ export default async function Home() {
       </div>
 
       <div className="mx-auto max-w-6xl px-6 py-8">
+        <div className="mb-5 flex flex-wrap items-center gap-2">
+          <span className="text-sm text-slate-500">Xem tháng:</span>
+          {cacThangXem.map((t) => {
+            const [n, m] = t.split("-");
+            const dangChon = t === thangDuocChon;
+            return (
+              <Link
+                key={t}
+                href={t === thangHienTai ? "/" : `/?thang=${t}`}
+                className={
+                  dangChon
+                    ? "rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white"
+                    : "rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                }
+              >
+                {Number(m)}/{n}
+              </Link>
+            );
+          })}
+        </div>
+        {!laThangHienTai ? (
+          <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Đang xem lại KPI tháng {tenThang}. Riêng mục Nhân sự (số người duy trì) chỉ gần đúng với tháng cũ vì
+            tính theo danh sách nhân viên có chỉ tiêu trong tháng đó.
+          </p>
+        ) : null}
+        {thieuCauHinhThang ? (
+          <p className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            Tháng {tenThang} chưa có cấu hình riêng (điểm KH của SS, chỉ tiêu nhân sự, SP thị trường) — tạm dùng
+            số của tháng gần nhất. Cần nhập file KPI tháng này để các mục đó chính xác.
+          </p>
+        ) : null}
         <ChonNhanVienXemKpi
           soChiTieu={soChiTieu}
           dsNhanVien={dsNhanVien ?? []}
