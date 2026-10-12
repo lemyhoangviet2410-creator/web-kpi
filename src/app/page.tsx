@@ -267,7 +267,7 @@ export default async function Home() {
 
   // ---- "Sản phẩm thị trường" (chỉ tiêu Mở mới riêng cho NV thử việc) ----
   // Danh sách 2 sản phẩm được phép chọn (OR) cho từng NV thử việc — lấy từ sheet "Chi tiết SP Thị
-  // Trường T9" tháng 9/2026. Đây là 1 nhóm SP HOÀN TOÀN KHÁC 7 SPTT (Mucome Baby Spray, Bixazol,
+  // Trường T10" tháng 10/2026. Đây là 1 nhóm SP HOÀN TOÀN KHÁC 7 SPTT (Mucome Baby Spray, Bixazol,
   // Liproin, Viên đặt pH.Balance — cột products.san_pham_thi_truong), mỗi NV thử việc chỉ cần mở
   // mới 1 khách hàng ở MỘT TRONG 2 sản phẩm được giao là đạt chỉ tiêu. Danh sách này gắn với người
   // + tháng cụ thể trong file công ty — cần cập nhật lại nếu công ty đổi sản phẩm giao hoặc có NV
@@ -275,11 +275,10 @@ export default async function Home() {
   // phẩm/khách hàng cụ thể trong file nên không tính được thực hiện cho phần đó (xem ghi chú ở
   // khối "KPI của SS = KPI của cả nhóm" phía dưới).
   const NHOM_SP_THI_TRUONG_THEO_NV: Record<string, string[]> = {
-    "020143": ["Mucome Baby Spray", "Bixazol"], // Nguyễn Anh Đức
     "020336": ["Mucome Baby Spray", "Bixazol"], // Phạm Minh Diệp
-    "020044": ["Liproin", "Viên đặt pH.Balance"], // Đặng Hà Giang
   };
-  const DIEM_KH_SP_THI_TRUONG_MOI_NGUOI = 200; // điểm KH mỗi NV thử việc — từ file công ty
+  // Điểm KH SP thị trường của từng NV — từ file công ty (tháng 10/2026 chỉ còn Diệp, 300 điểm).
+  const DIEM_KH_SP_THI_TRUONG_THEO_NV: Record<string, number> = { "020336": 300 };
 
   const donHopLeSpThiTruong = donHangToanBo.filter(
     (d) =>
@@ -334,9 +333,9 @@ export default async function Home() {
       ma_nv: maNv,
       soKhachDat,
       chiTieu: 1,
-      diemKh: DIEM_KH_SP_THI_TRUONG_MOI_NGUOI,
+      diemKh: DIEM_KH_SP_THI_TRUONG_THEO_NV[maNv] ?? 0,
       phanTram: tiLe * 100,
-      diemTh: tiLe * DIEM_KH_SP_THI_TRUONG_MOI_NGUOI,
+      diemTh: tiLe * (DIEM_KH_SP_THI_TRUONG_THEO_NV[maNv] ?? 0),
     };
   });
 
@@ -546,7 +545,7 @@ export default async function Home() {
   //    tổng Thực hiện 9 TDV + Thực hiện cá nhân của SS", áp dụng tương tự cho SPTT/Code mới. Vì KH
   //    giữ nguyên nhỏ trong khi TH cộng dồn cả team nên % có thể vượt xa 100% — đây là điều bình
   //    thường (giống cách DS Kê đơn/Phòng mạch không giới hạn trần).
-  const DIEM_KH_SS_RIENG = { codeMoi: 100, sptt: 550, spThiTruong: 50 }; // từ đúng dòng KPI riêng của SS, file tháng 9/2026 — cập nhật lại mỗi tháng
+  const DIEM_KH_SS_RIENG = { codeMoi: 100, sptt: 550, spThiTruong: 50 }; // từ đúng dòng KPI riêng của SS, file tháng 10/2026 — cập nhật lại mỗi tháng
   const teamKdPmTh = hangMuc.reduce((s, x) => s + x.keDonPhongMach, 0);
   const teamThauTh = hangMuc.reduce((s, x) => s + x.thau, 0);
   // Bảng hiển thị top-level (Mở mới/Duy trì) cho SS vẫn dùng số lượng khách/doanh số cộng dồn cả
@@ -572,21 +571,21 @@ export default async function Home() {
   // 15/9/2026) ----
   // KHÔNG dùng điểm đã tính sẵn của từng TDV (khác thang điểm — mỗi TDV có bộ 1000 điểm riêng).
   // Mỗi dòng của SS có 1 "Sản lượng KH" (chỉ tiêu SẢN LƯỢNG, không phải số khách) + 1 Điểm KH riêng
-  // — lấy từ sheet "Chi tiết SPTT T9", cộng gộp 2 dòng Kê đơn+Phòng mạch của cùng (sản phẩm, loại)
+  // — lấy từ sheet "Chi tiết SPTT T10", cộng gộp 2 dòng Kê đơn+Phòng mạch của cùng (sản phẩm, loại)
   // lại vì đơn hàng không tách được 2 kênh này. Ví dụ minh hoạ theo đúng công thức Việt cho: mục
   // tiêu Mở mới Fosmitic của SS là X điểm ứng với sản lượng kế hoạch Y; team thực hiện được Z sản
   // lượng → điểm đạt = min(Z/Y, trần) × X (trần 150% cho Mở mới, 100% cho Duy trì — không vượt).
   // CẦN CẬP NHẬT LẠI 9 dòng này mỗi tháng theo đúng file chỉ tiêu mới.
   const SS_SPTT_LINES: { nhom: string; loai: "duy_tri" | "mo_moi"; diemKh: number; slKh: number }[] = [
-    { nhom: "Progermila", loai: "duy_tri", diemKh: 100, slKh: 4400 + 7800 },
-    { nhom: "Progermila", loai: "mo_moi", diemKh: 75, slKh: 6610 },
-    { nhom: "Tranfast", loai: "mo_moi", diemKh: 50, slKh: 150 + 500 },
-    { nhom: "Tranfast", loai: "duy_tri", diemKh: 100, slKh: 15511.2 + 4100 },
-    { nhom: "Fosmitic", loai: "duy_tri", diemKh: 100, slKh: 400 + 1760 },
-    { nhom: "Fosmitic", loai: "mo_moi", diemKh: 50, slKh: 310 },
-    { nhom: "Biosoft", loai: "duy_tri", diemKh: 25, slKh: 9900 },
-    { nhom: "Hepaphagen", loai: "duy_tri", diemKh: 25, slKh: 750 },
-    { nhom: "Kalira", loai: "duy_tri", diemKh: 25, slKh: 1800 },
+    { nhom: "Progermila", loai: "duy_tri", diemKh: 100, slKh: 9300 + 8000 },
+    { nhom: "Progermila", loai: "mo_moi", diemKh: 75, slKh: 6410 },
+    { nhom: "Tranfast", loai: "mo_moi", diemKh: 50, slKh: 150 + 400 },
+    { nhom: "Tranfast", loai: "duy_tri", diemKh: 100, slKh: 15540 + 4000 },
+    { nhom: "Fosmitic", loai: "duy_tri", diemKh: 100, slKh: 400 + 1870 },
+    { nhom: "Fosmitic", loai: "mo_moi", diemKh: 50, slKh: 510 },
+    { nhom: "Biosoft", loai: "duy_tri", diemKh: 25, slKh: 35640 },
+    { nhom: "Hepaphagen", loai: "duy_tri", diemKh: 25, slKh: 800 },
+    { nhom: "Kalira", loai: "duy_tri", diemKh: 25, slKh: 1600 },
   ];
 
   // Sản lượng Duy trì thực hiện CẢ TEAM theo từng nhóm SP (không phân biệt NV nào bán).
@@ -674,8 +673,8 @@ export default async function Home() {
   }
 
   // ---- Nhân sự (chỉ tiêu riêng của SS) ----
-  // Chỉ tiêu tháng 9/2026 lấy từ cột "TD mới SL KH" / "DT NS KH" / "Đ.KH tổng" sheet "KH KPIs
-  // tháng 9": Tuyển mới KH=1 người, Duy trì nhân sự KH=9 người, tổng 100 điểm — Việt xác nhận
+  // Chỉ tiêu tháng 10/2026 lấy từ cột "TD mới SL KH" / "DT NS KH" / "Đ.KH tổng" sheet "KH KPIs
+  // tháng 10": Tuyển mới KH=2 người, Duy trì nhân sự KH=8 người, tổng 100 điểm — Việt xác nhận
   // 15/9/2026: Tuyển mới chiếm 30% (30 điểm), Duy trì chiếm 70% (70 điểm) trong 100 điểm kế hoạch.
   // CẦN CẬP NHẬT LẠI các số này mỗi tháng theo đúng file chỉ tiêu mới (tỉ lệ 30/70 giữ nguyên trừ
   // khi công ty đổi).
@@ -683,8 +682,8 @@ export default async function Home() {
   // bạn NV). Tuyển mới TH nhập tay qua bảng nhan_su_thuc_hien (hệ thống không có dữ liệu ngày
   // tuyển nên không tự tính được).
   const CHI_TIEU_NHAN_SU_THANG_NAY = {
-    tuyenMoiKh: 1,
-    duyTriKh: 9,
+    tuyenMoiKh: 2,
+    duyTriKh: 8,
     diemKhTuyenMoi: 30,
     diemKhDuyTri: 70,
     get diemKh() {
@@ -720,9 +719,6 @@ export default async function Home() {
   // tính vào tổng và không xét rule "dưới 50%". Mục nào NV có bị áp nhưng hệ thống CHƯA có nguồn dữ
   // liệu để tính (Nhân sự, SP thị trường) thì đánh dấu "chưa theo dõi" — không tự suy đoán là đạt.
   //
-  // Danh sách NV thử việc (HĐ=TV) lấy từ file chỉ tiêu tháng 9/2026 — DB chưa có cột lưu trạng thái
-  // hợp đồng nên tạm hard-code ở đây; cần cập nhật lại khi có người đổi trạng thái hoặc NV mới.
-  const MA_NV_THU_VIEC = new Set(["020044", "020143", "020336"]); // Đặng Hà Giang, Nguyễn Anh Đức, Phạm Minh Diệp
 
   type MucKpi = {
     ten: string;
@@ -759,7 +755,6 @@ export default async function Home() {
 
   const diemKpi: DiemKpi[] = (dsNhanVien ?? []).map((nv) => {
     const laSS = nv.vai_tro === "ss";
-    const laThuViec = MA_NV_THU_VIEC.has(nv.ma_nv);
     const ds = hangMuc.find((x) => x.ma_nv === nv.ma_nv);
     const cm = hangMucCodeMoi.find((x) => x.ma_nv === nv.ma_nv);
     // SPTT của SS: Điểm KH giữ đúng 550 điểm riêng của SS (không cộng dồn chỉ tiêu từng NV — xem
@@ -826,7 +821,7 @@ export default async function Home() {
         const sptt = hangMucSpThiTruong.find((x) => x.ma_nv === nv.ma_nv);
         return {
           ten: "Sản phẩm thị trường",
-          apDung: laThuViec,
+          apDung: nv.ma_nv in NHOM_SP_THI_TRUONG_THEO_NV,
           theoDoi: true,
           phanTram: sptt?.phanTram ?? null,
           diemKh: sptt?.diemKh ?? 0,
