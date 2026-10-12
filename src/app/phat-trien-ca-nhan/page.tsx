@@ -2,6 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { TEN_COOKIE_MA_NV } from "@/lib/gate";
+import { khongTinhDoanhSo } from "@/lib/doanh-so";
 
 function themThang(ngay: Date, soThang: number): Date {
   return new Date(Date.UTC(ngay.getUTCFullYear(), ngay.getUTCMonth() + soThang, ngay.getUTCDate()));
@@ -29,10 +30,10 @@ export default async function TrangPhatTrienCaNhan({
   ] = await Promise.all([
     supabase
       .from("orders")
-      .select("tong_tien, so_luong, ma_nv, products(nhom_trong_tam)")
+      .select("tong_tien, so_luong, ma_nv, products(nhom_trong_tam, khong_tinh_doanh_so)")
       .gte("ngay_chung_tu", dauThang)
       .lt("ngay_chung_tu", dauThangSau),
-    supabase.from("orders").select("tong_tien").gte("ngay_chung_tu", dauThangTruoc).lt("ngay_chung_tu", dauThang),
+    supabase.from("orders").select("tong_tien, products(khong_tinh_doanh_so)").gte("ngay_chung_tu", dauThangTruoc).lt("ngay_chung_tu", dauThang),
     supabase.from("nhan_vien").select("ma_nv, ten_nv").eq("vai_tro", "ss").maybeSingle(),
     supabase.from("ghi_chu_phat_trien").select("thang, noi_dung, cap_nhat_luc").order("thang", { ascending: false }),
   ]);
@@ -43,13 +44,16 @@ export default async function TrangPhatTrienCaNhan({
   const { data: dsNhanVien } = await supabase.from("nhan_vien").select("ma_nv, ten_nv");
   const tenNvTheoMa = new Map((dsNhanVien ?? []).map((nv) => [nv.ma_nv, nv.ten_nv]));
 
-  const doanhSoThangNay = (donThangNay ?? []).reduce((s, d) => s + (d.tong_tien ?? 0), 0);
-  const doanhSoThangTruoc = (donThangTruoc ?? []).reduce((s, d) => s + (d.tong_tien ?? 0), 0);
+  const donTinhDoanhSoThangNay = (donThangNay ?? []).filter((d) => !khongTinhDoanhSo(d.products));
+  const doanhSoThangNay = donTinhDoanhSoThangNay.reduce((s, d) => s + (d.tong_tien ?? 0), 0);
+  const doanhSoThangTruoc = (donThangTruoc ?? [])
+    .filter((d) => !khongTinhDoanhSo(d.products))
+    .reduce((s, d) => s + (d.tong_tien ?? 0), 0);
   const phanTramSoThangTruoc =
     doanhSoThangTruoc > 0 ? ((doanhSoThangNay - doanhSoThangTruoc) / doanhSoThangTruoc) * 100 : null;
 
   const doanhSoTheoNv = new Map<string, number>();
-  for (const d of donThangNay ?? []) {
+  for (const d of donTinhDoanhSoThangNay) {
     if (!d.ma_nv) continue;
     doanhSoTheoNv.set(d.ma_nv, (doanhSoTheoNv.get(d.ma_nv) ?? 0) + (d.tong_tien ?? 0));
   }

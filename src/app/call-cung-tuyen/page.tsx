@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { khongTinhDoanhSo } from "@/lib/doanh-so";
 
 type Visit = {
   ma_nv: string | null;
@@ -13,6 +14,7 @@ type Visit = {
 };
 
 type Order = {
+  products: { khong_tinh_doanh_so: boolean | null }[] | { khong_tinh_doanh_so: boolean | null } | null;
   ma_to_chuc: string | null;
   ngay_chung_tu: string;
   tong_tien: number | null;
@@ -37,7 +39,7 @@ export default async function TrangCallCungTuyen() {
       .order("tg_checkin", { ascending: true }),
     supabase
       .from("orders")
-      .select("ma_to_chuc, ngay_chung_tu, tong_tien")
+      .select("ma_to_chuc, ngay_chung_tu, tong_tien, products(khong_tinh_doanh_so)")
       .gte("ngay_chung_tu", dauThang)
       .lt("ngay_chung_tu", dauThangSau),
   ]);
@@ -47,7 +49,7 @@ export default async function TrangCallCungTuyen() {
 
   const donTheoKhach = new Map<string, { soLuong: number; tongTien: number }>();
   for (const d of orders) {
-    if (!d.ma_to_chuc) continue;
+    if (!d.ma_to_chuc || khongTinhDoanhSo(d.products)) continue;
     const hien = donTheoKhach.get(d.ma_to_chuc) ?? { soLuong: 0, tongTien: 0 };
     hien.soLuong += 1;
     hien.tongTien += d.tong_tien ?? 0;

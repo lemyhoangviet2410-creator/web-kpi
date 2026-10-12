@@ -5,6 +5,7 @@ import NutDangXuat from "@/components/nut-dang-xuat";
 import ChonNhanVienXemKpi from "@/components/chon-nhan-vien-xem-kpi";
 import { NHOM_SAN_PHAM_TRONG_TAM } from "@/lib/sptt";
 import { TEN_COOKIE_MA_NV } from "@/lib/gate";
+import { khongTinhDoanhSo } from "@/lib/doanh-so";
 
 function themThang(ngay: Date, soThang: number): Date {
   return new Date(Date.UTC(ngay.getUTCFullYear(), ngay.getUTCMonth() + soThang, ngay.getUTCDate()));
@@ -73,7 +74,7 @@ export default async function Home() {
     supabase.from("nhan_vien").select("ma_nv, ten_nv, vai_tro").eq("active", true).order("ten_nv"),
     supabase
       .from("orders")
-      .select("ma_nv, ma_vu_viec, tong_tien")
+      .select("ma_nv, ma_vu_viec, tong_tien, products(khong_tinh_doanh_so)")
       .gte("ngay_chung_tu", dauThang)
       .lt("ngay_chung_tu", dauThangSau),
     layDonHangLichSuChoMoMoi(),
@@ -121,6 +122,7 @@ export default async function Home() {
   const tongTheoNv = new Map<string, Tong>();
 
   for (const dong of donHang ?? []) {
+    if (khongTinhDoanhSo(dong.products)) continue;
     const hienTai = tongTheoNv.get(dong.ma_nv) ?? { thau: 0, keDonPhongMach: 0 };
     if (dong.ma_vu_viec === "TH") {
       hienTai.thau += Number(dong.tong_tien);

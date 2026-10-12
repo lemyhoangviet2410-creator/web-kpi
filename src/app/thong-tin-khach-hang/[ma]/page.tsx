@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { khongTinhDoanhSo } from "@/lib/doanh-so";
 
 export default async function TrangChiTietKhachHang({
   params,
@@ -15,7 +16,7 @@ export default async function TrangChiTietKhachHang({
     supabase.from("customers").select("ma_to_chuc, ten_to_chuc, tinh_tp, dia_chi").eq("ma_to_chuc", maToChuc).maybeSingle(),
     supabase
       .from("orders")
-      .select("ngay_chung_tu, ma_chung_tu, ma_sp, so_luong, don_vi, tong_tien, ma_nv, products(ten_sp)")
+      .select("ngay_chung_tu, ma_chung_tu, ma_sp, so_luong, don_vi, tong_tien, ma_nv, products(ten_sp, khong_tinh_doanh_so)")
       .eq("ma_to_chuc", maToChuc)
       .order("ngay_chung_tu", { ascending: false }),
     supabase
@@ -32,7 +33,8 @@ export default async function TrangChiTietKhachHang({
   const donHang = dsDon ?? [];
   const lichSuCall = dsCall ?? [];
 
-  const tongDoanhThu = donHang.reduce((s, d) => s + (d.tong_tien ?? 0), 0);
+  const donTinhDoanhSo = donHang.filter((d) => !khongTinhDoanhSo(d.products));
+  const tongDoanhThu = donTinhDoanhSo.reduce((s, d) => s + (d.tong_tien ?? 0), 0);
   const soLuotCallDaDuyet = lichSuCall.filter((c) => c.trang_thai_call === "Đã duyệt").length;
   const lanCallGanNhat = lichSuCall[0]?.tg_checkin ?? null;
   const lanMuaGanNhat = donHang[0]?.ngay_chung_tu ?? null;
@@ -82,7 +84,7 @@ export default async function TrangChiTietKhachHang({
           </div>
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
             <p className="text-xs text-slate-500">Số đơn hàng</p>
-            <p className="mt-1 text-lg font-semibold text-slate-900">{donHang.length}</p>
+            <p className="mt-1 text-lg font-semibold text-slate-900">{donTinhDoanhSo.length}</p>
           </div>
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
             <p className="text-xs text-slate-500">Lượt call đã duyệt</p>
@@ -129,7 +131,13 @@ export default async function TrangChiTietKhachHang({
                       <td className="px-3 py-2 text-right text-slate-600">
                         {d.so_luong?.toLocaleString("vi-VN")} {d.don_vi}
                       </td>
-                      <td className="px-3 py-2 text-right text-slate-600">{formatTien(d.tong_tien ?? 0)}</td>
+                      <td className="px-3 py-2 text-right text-slate-600">
+                        {khongTinhDoanhSo(d.products) ? (
+                          <span className="text-slate-400">Không tính doanh số</span>
+                        ) : (
+                          formatTien(d.tong_tien ?? 0)
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

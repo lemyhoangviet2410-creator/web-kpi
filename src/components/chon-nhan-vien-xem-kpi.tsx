@@ -413,7 +413,7 @@ export default function ChonNhanVienXemKpi({
           </div>
         </div>
         <p className="px-6 pb-5 text-xs text-slate-400">
-          Đơn khách hàng web / đơn online vẫn được tính vào doanh số ở đây, nhưng không tính vào Mở mới hay Duy trì.
+          Đơn khách hàng web / đơn online vẫn được tính vào doanh số ở đây, nhưng không tính vào Mở mới hay Duy trì. Đơn nước cất không được tính vào doanh số.
         </p>
       </KhoiMuc>
 
