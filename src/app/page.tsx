@@ -16,6 +16,7 @@ type CauHinhThang = {
   ss_sptt_lines: { nhom: string; loai: "duy_tri" | "mo_moi"; diemKh: number; slKh: number }[];
   chi_tieu_nhan_su: { tuyenMoiKh: number; duyTriKh: number; diemKhTuyenMoi: number; diemKhDuyTri: number };
   sp_thi_truong: Record<string, { nhom: string[]; diemKh: number }>;
+  coaching?: { khLanThang: number };
 };
 
 const CAU_HINH_RONG: CauHinhThang = {
@@ -101,6 +102,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
     new Set([...hangCauHinhThang.map((h) => h.thang.slice(0, 7)), thangHienTai, thangDuocChon])
   ).sort((a, b) => (a < b ? 1 : -1));
 
+  const maSsDauTien = dsNhanVien.find((nv) => nv.vai_tro === "ss")?.ma_nv ?? null;
+
   const [
     { data: donHang },
     donHangToanBo,
@@ -112,6 +115,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
     { data: mucTieuCodeMoi },
     { data: codeMoiDaDuyet },
     { data: nhanSuThucHien },
+    { data: mucTieuSpThiTruong },
+    { count: soLuotCoaching },
   ] = await Promise.all([
     supabase
       .from("orders")
@@ -127,7 +132,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
       .eq("thang", dauThang),
     supabase
       .from("orders")
-      .select("ma_nv, ma_to_chuc, ma_vu_viec, so_luong, products(nhom_trong_tam)")
+      .select("ma_nv, ma_to_chuc, ma_vu_viec, so_luong, products(nhom_trong_tam, san_pham_thi_truong)")
       .gte("ngay_chung_tu", dauThang)
       .lt("ngay_chung_tu", dauThangSau),
     supabase
@@ -152,6 +157,21 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
       .gte("ngay_duyet", dauThang)
       .lt("ngay_duyet", dauThangSau),
     supabase.from("nhan_su_thuc_hien").select("ma_nv, tuyen_moi_th").eq("thang", dauThang),
+    supabase
+      .from("kpi_targets")
+      .select("ma_nv, loai_kpi, ma_to_chuc, chi_tieu, diem_kh, nhom_sp, customers(ten_to_chuc)")
+      .in("loai_kpi", ["sp_thi_truong_duy_tri", "sp_thi_truong_mo_moi"])
+      .eq("thang", dauThang),
+    // Coaching (tần suất viếng thăm) của SS: số lượt check-in đã duyệt của chính SS trong tháng.
+    maSsDauTien
+      ? supabase
+          .from("visits")
+          .select("*", { count: "exact", head: true })
+          .eq("ma_nv", maSsDauTien)
+          .eq("trang_thai_call", "Đã duyệt")
+          .gte("tg_checkin", dauThang)
+          .lt("tg_checkin", dauThangSau)
+      : Promise.resolve({ count: 0 }),
   ]);
 
   // ---- Logic tính KPI hạng mục 1: Doanh số theo kênh ----
@@ -340,7 +360,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
     theoCapKhNhomSpThiTruong.set(khoa, ds);
   }
 
-  const soKhachMoiSpThiTruongTheoNv = new Map<string, Set<string>>(); // ma_nv -> set ma_to_chuc đạt
+  const khachMoiSpThiTruongTheoKhoa = new Map<string, Set<string>>(); // "ma_nv|nhóm SP thị trường" -> set ma_to_chuc mở mới đạt
 
   for (const ds of theoCapKhNhomSpThiTruong.values()) {
     const nvDaBan = new Set<string>();
@@ -356,12 +376,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
 
       if ((laLanDauTuyetDoi || duKhoangNghi) && nvChuaTungBan) {
         if (dong.ngay_chung_tu >= dauThang && dong.ngay_chung_tu < dauThangSau) {
-          const nhomChoPhep = NHOM_SP_THI_TRUONG_THEO_NV[maNv];
-          if (nhomChoPhep?.includes(nhom)) {
-            const ds2 = soKhachMoiSpThiTruongTheoNv.get(maNv) ?? new Set<string>();
-            ds2.add(dong.ma_to_chuc as string);
-            soKhachMoiSpThiTruongTheoNv.set(maNv, ds2);
-          }
+          const khoa = `${maNv}|${nhom}`;
+          const ds2 = khachMoiSpThiTruongTheoKhoa.get(khoa) ?? new Set<string>();
+          ds2.add(dong.ma_to_chuc as string);
+          khachMoiSpThiTruongTheoKhoa.set(khoa, ds2);
         }
       }
 
@@ -370,18 +388,124 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
     }
   }
 
-  const hangMucSpThiTruong = Object.keys(NHOM_SP_THI_TRUONG_THEO_NV).map((maNv) => {
-    const soKhachDat = soKhachMoiSpThiTruongTheoNv.get(maNv)?.size ?? 0;
-    const tiLe = Math.min(soKhachDat / 1, 1.5); // chỉ tiêu luôn là 1 khách mới/người
-    return {
-      ma_nv: maNv,
-      soKhachDat,
-      chiTieu: 1,
-      diemKh: DIEM_KH_SP_THI_TRUONG_THEO_NV[maNv] ?? 0,
-      phanTram: tiLe * 100,
-      diemTh: tiLe * (DIEM_KH_SP_THI_TRUONG_THEO_NV[maNv] ?? 0),
-    };
-  });
+  // Sản lượng SP thị trường tháng này theo (NV, khách, nhóm SP thị trường) — cho các dòng "duy trì".
+  const soLuongSpThiTruongTheoKhach = new Map<string, number>();
+  for (const dong of (donHangSoLuongThangNay ?? []) as unknown as {
+    ma_nv: string | null;
+    ma_to_chuc: string | null;
+    ma_vu_viec: string | null;
+    so_luong: number | null;
+    products: { san_pham_thi_truong: string | null } | null;
+  }[]) {
+    const nhomTt = dong.products?.san_pham_thi_truong;
+    if (!nhomTt || !dong.ma_nv || !dong.ma_to_chuc || MA_VU_VIEC_WEB_ONLINE.has(dong.ma_vu_viec ?? "")) continue;
+    const khoaTt = `${dong.ma_nv}|${dong.ma_to_chuc}|${nhomTt}`;
+    soLuongSpThiTruongTheoKhach.set(khoaTt, (soLuongSpThiTruongTheoKhach.get(khoaTt) ?? 0) + Number(dong.so_luong ?? 0));
+  }
+
+  // Từ tháng 11/2026 file công ty giao SP thị trường theo TỪNG DÒNG (sản phẩm, duy trì/mở mới, điểm
+  // riêng) — lưu ở kpi_targets (loai_kpi 'sp_thi_truong_duy_tri' / 'sp_thi_truong_mo_moi', cột
+  // nhom_sp). Tháng cũ không có các dòng này thì dùng cách tính cũ theo cấu hình tháng (NV chỉ cần
+  // mở mới 1 khách ở 1 trong các sản phẩm được giao).
+  type MucTieuSpThiTruong = {
+    ma_nv: string;
+    loai_kpi: string;
+    ma_to_chuc: string | null;
+    chi_tieu: number;
+    diem_kh: number | null;
+    nhom_sp: string | null;
+    customers: { ten_to_chuc: string } | { ten_to_chuc: string }[] | null;
+  };
+  type ChiTietSpThiTruong = {
+    maNv: string;
+    nhom: string;
+    loai: "duy_tri" | "mo_moi";
+    tenKh: string | null;
+    kh: number;
+    th: number;
+    phanTram: number;
+    diemKh: number;
+    diemTh: number;
+  };
+  const dongSpThiTruong = (mucTieuSpThiTruong ?? []) as unknown as MucTieuSpThiTruong[];
+  const coSpThiTruongTheoDong = dongSpThiTruong.length > 0;
+  const chiTietSpThiTruong: ChiTietSpThiTruong[] = [];
+  if (coSpThiTruongTheoDong) {
+    const moMoiGop = new Map<string, { maNv: string; nhom: string; kh: number; diemKh: number }>();
+    for (const d of dongSpThiTruong) {
+      const nhom = d.nhom_sp ?? "—";
+      if (d.loai_kpi === "sp_thi_truong_duy_tri") {
+        const kh = Number(d.chi_tieu);
+        const th = d.ma_to_chuc ? soLuongSpThiTruongTheoKhach.get(`${d.ma_nv}|${d.ma_to_chuc}|${nhom}`) ?? 0 : 0;
+        const tiLe = kh > 0 ? Math.min(th / kh, 1) : 0;
+        const diemKh = Number(d.diem_kh ?? 0);
+        const kh2 = Array.isArray(d.customers) ? d.customers[0] : d.customers;
+        chiTietSpThiTruong.push({
+          maNv: d.ma_nv,
+          nhom,
+          loai: "duy_tri",
+          tenKh: kh2?.ten_to_chuc ?? d.ma_to_chuc,
+          kh,
+          th,
+          phanTram: tiLe * 100,
+          diemKh,
+          diemTh: tiLe * diemKh,
+        });
+      } else {
+        const khoa = `${d.ma_nv}|${nhom}`;
+        const hienTai = moMoiGop.get(khoa) ?? { maNv: d.ma_nv, nhom, kh: 0, diemKh: 0 };
+        hienTai.kh += Number(d.chi_tieu);
+        hienTai.diemKh += Number(d.diem_kh ?? 0);
+        moMoiGop.set(khoa, hienTai);
+      }
+    }
+    for (const m of moMoiGop.values()) {
+      const th = khachMoiSpThiTruongTheoKhoa.get(`${m.maNv}|${m.nhom}`)?.size ?? 0;
+      const tiLe = m.kh > 0 ? Math.min(th / m.kh, 1.5) : 0;
+      chiTietSpThiTruong.push({
+        maNv: m.maNv,
+        nhom: m.nhom,
+        loai: "mo_moi",
+        tenKh: null,
+        kh: m.kh,
+        th,
+        phanTram: tiLe * 100,
+        diemKh: m.diemKh,
+        diemTh: tiLe * m.diemKh,
+      });
+    }
+  }
+
+  const hangMucSpThiTruong = coSpThiTruongTheoDong
+    ? [...new Set(chiTietSpThiTruong.map((c) => c.maNv))].map((maNv) => {
+        const dongNv = chiTietSpThiTruong.filter((c) => c.maNv === maNv);
+        const diemKh = dongNv.reduce((s, c) => s + c.diemKh, 0);
+        const diemTh = dongNv.reduce((s, c) => s + c.diemTh, 0);
+        return {
+          ma_nv: maNv,
+          soKhachDat: dongNv.filter((c) => c.phanTram >= 100).length, // số dòng chỉ tiêu đã đạt
+          chiTieu: dongNv.length, // tổng số dòng chỉ tiêu
+          diemKh,
+          phanTram: diemKh > 0 ? (diemTh / diemKh) * 100 : 0,
+          diemTh,
+        };
+      })
+    : Object.keys(NHOM_SP_THI_TRUONG_THEO_NV).map((maNv) => {
+        const khachDat = new Set<string>();
+        for (const nhom of NHOM_SP_THI_TRUONG_THEO_NV[maNv]) {
+          for (const kh of khachMoiSpThiTruongTheoKhoa.get(`${maNv}|${nhom}`) ?? []) khachDat.add(kh);
+        }
+        const soKhachDat = khachDat.size;
+        const tiLe = Math.min(soKhachDat / 1, 1.5); // chỉ tiêu luôn là 1 khách mới/người
+        return {
+          ma_nv: maNv,
+          soKhachDat,
+          chiTieu: 1,
+          diemKh: DIEM_KH_SP_THI_TRUONG_THEO_NV[maNv] ?? 0,
+          phanTram: tiLe * 100,
+          diemTh: tiLe * (DIEM_KH_SP_THI_TRUONG_THEO_NV[maNv] ?? 0),
+        };
+      });
 
   type ThongKe = { soDon: number; doanhSo: number };
   const tongMoMoiTheoNv = new Map<
@@ -478,7 +602,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
     ma_to_chuc: string | null;
     ma_vu_viec: string | null;
     so_luong: number | null;
-    products: { nhom_trong_tam: string | null } | null;
+    products: { nhom_trong_tam: string | null; san_pham_thi_truong: string | null } | null;
   };
   type MucTieuDuyTri = {
     ma_nv: string;
@@ -736,8 +860,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
   // riêng cho mục này trong file). Khác với SPTT (SS có sẵn 9 dòng chỉ tiêu riêng của chính SS),
   // SP thị trường SS không có chỉ tiêu số lượng riêng trong file — nên chỉ tiêu số lượng (mẫu số)
   // phải lấy bằng tổng chỉ tiêu của các NV thử việc bị áp mục này (khác với cách làm ở SPTT).
-  const spThiTruongChiTieuTeam = hangMucSpThiTruong.reduce((s, x) => s + x.chiTieu, 0);
-  const spThiTruongDatTeam = hangMucSpThiTruong.reduce((s, x) => s + x.soKhachDat, 0);
+  // Từ tháng 11/2026 (SP thị trường theo dòng): tỉ lệ = tổng điểm thực hiện / tổng điểm kế hoạch của
+  // cả nhóm. Tháng cũ: tổng khách đạt / tổng chỉ tiêu khách như trước.
+  const spThiTruongChiTieuTeam = hangMucSpThiTruong.reduce((s, x) => s + (coSpThiTruongTheoDong ? x.diemKh : x.chiTieu), 0);
+  const spThiTruongDatTeam = hangMucSpThiTruong.reduce((s, x) => s + (coSpThiTruongTheoDong ? x.diemTh : x.soKhachDat), 0);
   const tiLeSpThiTruongTeam = spThiTruongChiTieuTeam > 0 ? spThiTruongDatTeam / spThiTruongChiTieuTeam : 0;
   const teamPhanTramSpThiTruong = Math.min(tiLeSpThiTruongTeam, 1.5) * 100;
   const teamDiemThSpThiTruong = Math.min(tiLeSpThiTruongTeam, 1.5) * DIEM_KH_SS_RIENG.spThiTruong;
@@ -783,6 +909,11 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
       diemThMoMoiTheoNv.set(nv.ma_nv, (diemThMoMoiTheoNv.get(nv.ma_nv) ?? 0) + n.diemTh);
     }
   }
+
+  // Coaching (tần suất viếng thăm) — chỉ áp cho SS, từ tháng 11/2026. Không có điểm riêng trong file
+  // công ty, nhưng % đạt vẫn được tính vào quy tắc "không hạng mục nào dưới 50%".
+  const coachingKh = cauHinh.coaching?.khLanThang ?? 0;
+  const coachingTh = soLuotCoaching ?? 0;
 
   const diemKpi: DiemKpi[] = (dsNhanVien ?? []).map((nv) => {
     const laSS = nv.vai_tro === "ss";
@@ -831,6 +962,14 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
         diemTh: laSS ? diemThNhanSu : 0,
       },
       {
+        ten: "Coaching (tần suất viếng thăm)",
+        apDung: laSS && coachingKh > 0,
+        theoDoi: true,
+        phanTram: coachingKh > 0 ? (coachingTh / coachingKh) * 100 : null,
+        diemKh: 0,
+        diemTh: 0,
+      },
+      {
         ten: "Sản phẩm trọng tâm (Duy trì + Mở mới)",
         apDung: diemKhSptt > 0,
         theoDoi: true,
@@ -852,7 +991,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
         const sptt = hangMucSpThiTruong.find((x) => x.ma_nv === nv.ma_nv);
         return {
           ten: "Sản phẩm thị trường",
-          apDung: nv.ma_nv in NHOM_SP_THI_TRUONG_THEO_NV,
+          apDung: hangMucSpThiTruong.some((x) => x.ma_nv === nv.ma_nv),
           theoDoi: true,
           phanTram: sptt?.phanTram ?? null,
           diemKh: sptt?.diemKh ?? 0,
@@ -960,6 +1099,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ t
           hangMucDuyTri={hangMucDuyTri}
           hangMucCodeMoi={hangMucCodeMoi}
           hangMucSpThiTruong={hangMucSpThiTruong}
+          chiTietSpThiTruong={chiTietSpThiTruong}
+          coaching={coachingKh > 0 ? { kh: coachingKh, th: coachingTh } : null}
           chiTietMoMoi={chiTietMoMoi}
           chiTietDuyTri={chiTietDuyTri}
           tenKhTheoMa={Object.fromEntries(tenKhTheoMa)}

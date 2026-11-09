@@ -65,6 +65,18 @@ type HangMucSpThiTruong = {
   diemTh: number;
 };
 
+type ChiTietSpThiTruong = {
+  maNv: string;
+  nhom: string;
+  loai: "duy_tri" | "mo_moi";
+  tenKh: string | null;
+  kh: number;
+  th: number;
+  phanTram: number;
+  diemKh: number;
+  diemTh: number;
+};
+
 type NhanSuInfo = {
   thang: string;
   tuyenMoiKh: number;
@@ -121,6 +133,8 @@ type Props = {
   hangMucDuyTri: HangMucDuyTri[];
   hangMucCodeMoi: HangMucCodeMoi[];
   hangMucSpThiTruong: HangMucSpThiTruong[];
+  chiTietSpThiTruong: ChiTietSpThiTruong[];
+  coaching: { kh: number; th: number } | null;
   chiTietMoMoi: DonMoMoi[];
   chiTietDuyTri: ChiTietDuyTri[];
   tenKhTheoMa: Record<string, string>;
@@ -261,6 +275,8 @@ export default function ChonNhanVienXemKpi({
   hangMucDuyTri,
   hangMucCodeMoi,
   hangMucSpThiTruong,
+  chiTietSpThiTruong,
+  coaching,
   chiTietMoMoi,
   chiTietDuyTri,
   tenKhTheoMa,
@@ -276,6 +292,7 @@ export default function ChonNhanVienXemKpi({
   const nvDuyTri = hangMucDuyTri.find((x) => x.ma_nv === maNvDangChon);
   const nvCodeMoi = hangMucCodeMoi.find((x) => x.ma_nv === maNvDangChon);
   const nvSpThiTruong = hangMucSpThiTruong.find((x) => x.ma_nv === maNvDangChon);
+  const dongSpThiTruongCuaNv = chiTietSpThiTruong.filter((d) => d.maNv === maNvDangChon);
   const nvDiemKpi = diemKpi.find((x) => x.ma_nv === maNvDangChon);
   const spThiTruongApDung = laSS ? true : !!nvSpThiTruong;
   const donMoMoiCuaNv = chiTietMoMoi
@@ -358,7 +375,7 @@ export default function ChonNhanVienXemKpi({
           </div>
 
           <p className="mt-4 text-xs leading-relaxed text-slate-500">
-            Tổng điểm chính thức của công ty là <b>1000 điểm</b>, chia 6 hạng mục ở trên. Cần đạt <b>≥850 điểm</b> và{" "}
+            Tổng điểm chính thức của công ty là <b>1000 điểm</b>, chia các hạng mục ở trên. Cần đạt <b>≥850 điểm</b> và{" "}
             <b>không có hạng mục nào dưới 50%</b> mới tính đạt KPI.
           </p>
 
@@ -597,6 +614,23 @@ export default function ChonNhanVienXemKpi({
         </KhoiMuc>
       ) : null}
 
+      {/* ---- Coaching (chỉ SS) ---- */}
+      {laSS && coaching ? (
+        <KhoiMuc mau="rose" icon="◎" tieuDe="Coaching (tần suất viếng thăm)">
+          <div className="p-6">
+            <TheThongKe
+              nhan="Lượt viếng thăm đã duyệt của SS"
+              giaTri={`${coaching.th} / ${coaching.kh} lần`}
+              phanTram={coaching.kh > 0 ? (coaching.th / coaching.kh) * 100 : null}
+            />
+            <p className="mt-3 text-xs text-slate-400">
+              Mục này không có điểm riêng nhưng vẫn tính vào quy tắc &quot;không hạng mục nào dưới 50%&quot;. Số lần
+              lấy từ các lượt check-in đã duyệt của SS trong báo cáo call.
+            </p>
+          </div>
+        </KhoiMuc>
+      ) : null}
+
       {/* ---- Sản phẩm thị trường (SS + NV thử việc) ---- */}
       {spThiTruongApDung ? (
         <KhoiMuc mau="fuchsia" icon="✦" tieuDe="Sản phẩm thị trường">
@@ -612,12 +646,58 @@ export default function ChonNhanVienXemKpi({
                       phanTram={muc?.phanTram ?? null}
                     />
                     <p className="mt-3 text-xs text-slate-400">
-                      Tổng điểm khả dụng của cả nhóm bao gồm cả 50 điểm riêng của SS — phần này chưa có breakdown sản
-                      phẩm/khách hàng cụ thể trong file công ty nên chưa tính được thực hiện.
+                      Điểm của SS = tỉ lệ thực hiện chung của cả nhóm (tổng điểm đạt / tổng điểm kế hoạch của các nhân
+                      viên) nhân với điểm kế hoạch riêng của SS. File công ty không chia dòng sản phẩm riêng cho SS.
                     </p>
                   </>
                 );
               })()
+            ) : dongSpThiTruongCuaNv.length > 0 ? (
+              <>
+                <TheThongKe
+                  nhan="Điểm đã đạt"
+                  giaTri={`${(nvSpThiTruong?.diemTh ?? 0).toFixed(0)} / ${(nvSpThiTruong?.diemKh ?? 0).toFixed(0)} điểm`}
+                  phanTram={nvSpThiTruong?.phanTram ?? null}
+                />
+                <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full min-w-[640px]">
+                    <thead className="bg-slate-50">
+                      <tr>
+                        <th className={thBase}>Sản phẩm</th>
+                        <th className={thBase}>Loại</th>
+                        <th className={thBase}>Khách hàng</th>
+                        <th className={`${thBase} text-right`}>Chỉ tiêu</th>
+                        <th className={`${thBase} text-right`}>Thực hiện</th>
+                        <th className={`${thBase} text-right`}>Điểm</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {dongSpThiTruongCuaNv.map((d, i) => (
+                        <tr key={i}>
+                          <td className={`${tdBase} font-medium text-slate-900`}>{d.nhom}</td>
+                          <td className={tdBase}>{d.loai === "mo_moi" ? "Mở mới" : "Duy trì"}</td>
+                          <td className={tdBase}>{d.tenKh ?? "Khách mới"}</td>
+                          <td className={`${tdBase} text-right tabular-nums`}>
+                            {d.kh.toLocaleString("vi-VN")}
+                            {d.loai === "mo_moi" ? " khách" : ""}
+                          </td>
+                          <td className={`${tdBase} text-right tabular-nums`}>
+                            {d.th.toLocaleString("vi-VN")}
+                            {d.loai === "mo_moi" ? " khách" : ""}
+                          </td>
+                          <td className={`${tdBase} text-right tabular-nums`}>
+                            {d.diemTh.toFixed(0)} / {d.diemKh.toFixed(0)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="mt-3 text-xs text-slate-400">
+                  Duy trì: khách đó mua đủ sản lượng giao trong tháng (không đủ thì tính theo tỉ lệ). Mở mới: số khách
+                  mới mở được cho sản phẩm đó theo quy tắc Mở mới (trần 150%).
+                </p>
+              </>
             ) : (
               <TheThongKe
                 nhan="Khách hàng mới đạt"
